@@ -93,7 +93,7 @@ func (m Model) handleNormalKey(key string) (tea.Model, tea.Cmd) {
 // handleFilterKey processes keys while the filter input is active.
 func (m Model) handleFilterKey(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd) {
 	switch key {
-	case "escape":
+	case "esc":
 		m.filtering = false
 		m.filterText = ""
 		m.applyFilter()

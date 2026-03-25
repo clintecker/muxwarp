@@ -113,10 +113,7 @@ func ScanAll(ctx context.Context, hosts []string, maxParallel int, timeoutSec st
 		default:
 		}
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			// Acquire semaphore slot.
 			select {
 			case sem <- struct{}{}:
@@ -129,7 +126,7 @@ func ScanAll(ctx context.Context, hosts []string, maxParallel int, timeoutSec st
 			if len(sessions) > 0 {
 				onBatch(host, sessions)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

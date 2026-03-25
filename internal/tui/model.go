@@ -1,7 +1,8 @@
 package tui
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -95,24 +96,24 @@ func (m Model) WarpTarget() *Session {
 // sortSessions sorts sessions: FREE (Attached==0) first, then DOCKED,
 // then alphabetically by host then name within each group.
 func sortSessions(sessions []Session) {
-	sort.Slice(sessions, func(i, j int) bool {
-		ai := sessions[i]
-		aj := sessions[j]
-
+	slices.SortFunc(sessions, func(a, b Session) int {
 		// FREE before DOCKED
-		freeI := ai.Attached == 0
-		freeJ := aj.Attached == 0
-		if freeI != freeJ {
-			return freeI
+		freeA := a.Attached == 0
+		freeB := b.Attached == 0
+		if freeA != freeB {
+			if freeA {
+				return -1
+			}
+			return 1
 		}
 
 		// Alphabetical by host
-		if ai.Host != aj.Host {
-			return ai.Host < aj.Host
+		if c := cmp.Compare(a.Host, b.Host); c != 0 {
+			return c
 		}
 
 		// Alphabetical by name
-		return ai.Name < aj.Name
+		return cmp.Compare(a.Name, b.Name)
 	})
 }
 
