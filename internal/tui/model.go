@@ -70,14 +70,45 @@ func NewModelWithFakeData() Model {
 	return m
 }
 
+// SessionBatchMsg delivers a batch of sessions from one host.
+type SessionBatchMsg struct {
+	Host     string
+	Sessions []Session
+}
+
+// ScanDoneMsg signals that scanning is complete.
+type ScanDoneMsg struct{}
+
 // NewModel creates an empty Model ready to receive scan results.
-func NewModel() Model {
+// scanTotal is the number of hosts that will be scanned.
+func NewModel(scanTotal int) Model {
 	return Model{
 		scanning:  true,
+		scanTotal: scanTotal,
 		width:     80,
 		height:    24,
 		matchInfo: make(map[string]matchInfo),
 	}
+}
+
+// NewModelWithSessions creates a Model pre-populated with sessions and an
+// optional filter. Used by direct warp mode when multiple matches are found.
+func NewModelWithSessions(sessions []Session, filter string) Model {
+	m := Model{
+		sessions:  sessions,
+		width:     80,
+		height:    24,
+		matchInfo: make(map[string]matchInfo),
+	}
+	sortSessions(m.sessions)
+	if filter != "" {
+		m.filtering = true
+		m.filterText = filter
+		m.applyFilter()
+	} else {
+		m.filtered = m.sessions
+	}
+	return m
 }
 
 // Init implements tea.Model. No startup command needed for now.

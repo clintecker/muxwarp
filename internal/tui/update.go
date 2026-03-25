@@ -6,7 +6,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// Update implements tea.Model. It handles key presses and window resize events.
+// Update implements tea.Model. It handles key presses, window resize events,
+// and scanner messages.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -17,6 +18,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
+
+	case SessionBatchMsg:
+		m.sessions = append(m.sessions, msg.Sessions...)
+		sortSessions(m.sessions)
+		m.scanDone++
+		m.applyFilter()
+		m.ensureViewport()
+		return m, nil
+
+	case ScanDoneMsg:
+		m.scanning = false
+		return m, nil
 	}
 
 	return m, nil
