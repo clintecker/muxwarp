@@ -6,6 +6,32 @@ import (
 	"testing"
 )
 
+func assertFrameContains(t *testing.T, frameIdx int, frame, substr string) {
+	t.Helper()
+	if !strings.Contains(frame, substr) {
+		t.Errorf("frame %d missing %q: %q", frameIdx, substr, frame)
+	}
+}
+
+func assertAllFramesContain(t *testing.T, frames []string, substrs ...string) {
+	t.Helper()
+	for i, f := range frames {
+		for _, s := range substrs {
+			assertFrameContains(t, i, f, s)
+		}
+	}
+}
+
+func assertGrowingFrames(t *testing.T, frames []string) {
+	t.Helper()
+	for i := 1; i < len(frames); i++ {
+		if len(frames[i]) <= len(frames[i-1]) {
+			t.Errorf("frame %d (len %d) should be longer than frame %d (len %d)",
+				i, len(frames[i]), i-1, len(frames[i-1]))
+		}
+	}
+}
+
 func TestWarpFrames(t *testing.T) {
 	frames := WarpFrames("indigo", "cjdos", 80)
 
@@ -13,30 +39,8 @@ func TestWarpFrames(t *testing.T) {
 		t.Fatalf("WarpFrames returned %d frames, want 4", len(frames))
 	}
 
-	// Every frame must contain the jumpgate label.
-	for i, f := range frames {
-		if !strings.Contains(f, "engaging jumpgate") {
-			t.Errorf("frame %d missing 'engaging jumpgate': %q", i, f)
-		}
-		if !strings.Contains(f, "indigo/cjdos") {
-			t.Errorf("frame %d missing 'indigo/cjdos': %q", i, f)
-		}
-	}
-
-	// Each frame should be longer than the previous one (growing bar).
-	for i := 1; i < len(frames); i++ {
-		if len(frames[i]) <= len(frames[i-1]) {
-			t.Errorf("frame %d (len %d) should be longer than frame %d (len %d)",
-				i, len(frames[i]), i-1, len(frames[i-1]))
-		}
-	}
-
-	// Every frame must contain at least one block character.
-	for i, f := range frames {
-		if !strings.Contains(f, "█") {
-			t.Errorf("frame %d missing block character: %q", i, f)
-		}
-	}
+	assertAllFramesContain(t, frames, "engaging jumpgate", "indigo/cjdos", "\u2588")
+	assertGrowingFrames(t, frames)
 }
 
 func TestWarpFramesMinBar(t *testing.T) {
@@ -47,14 +51,13 @@ func TestWarpFramesMinBar(t *testing.T) {
 		t.Fatalf("WarpFrames returned %d frames, want 4", len(frames))
 	}
 
-	// Should still contain the label and block chars.
-	for i, f := range frames {
-		if !strings.Contains(f, "engaging jumpgate") {
-			t.Errorf("frame %d missing 'engaging jumpgate': %q", i, f)
-		}
-		if !strings.Contains(f, "█") {
-			t.Errorf("frame %d missing block character: %q", i, f)
-		}
+	assertAllFramesContain(t, frames, "engaging jumpgate", "\u2588")
+}
+
+func assertOutputContains(t *testing.T, output, substr, label string) {
+	t.Helper()
+	if !strings.Contains(output, substr) {
+		t.Errorf("output missing %s", label)
 	}
 }
 
@@ -64,22 +67,11 @@ func TestPlayWarpAnimationTo(t *testing.T) {
 
 	output := buf.String()
 
-	if !strings.Contains(output, "engaging jumpgate") {
-		t.Error("output missing 'engaging jumpgate'")
-	}
-	if !strings.Contains(output, "indigo/cjdos") {
-		t.Error("output missing 'indigo/cjdos'")
-	}
-	if !strings.Contains(output, "█") {
-		t.Error("output missing block character")
-	}
+	assertOutputContains(t, output, "engaging jumpgate", "'engaging jumpgate'")
+	assertOutputContains(t, output, "indigo/cjdos", "'indigo/cjdos'")
+	assertOutputContains(t, output, "\u2588", "block character")
+	assertOutputContains(t, output, "\r", "carriage return (\\r)")
 
-	// The output must use carriage returns to overwrite the line.
-	if !strings.Contains(output, "\r") {
-		t.Error("output missing carriage return (\\r)")
-	}
-
-	// The output must end with a newline.
 	if !strings.HasSuffix(output, "\n") {
 		t.Error("output should end with newline")
 	}

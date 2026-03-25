@@ -96,25 +96,27 @@ func (m Model) WarpTarget() *Session {
 // sortSessions sorts sessions: FREE (Attached==0) first, then DOCKED,
 // then alphabetically by host then name within each group.
 func sortSessions(sessions []Session) {
-	slices.SortFunc(sessions, func(a, b Session) int {
-		// FREE before DOCKED
-		freeA := a.Attached == 0
-		freeB := b.Attached == 0
-		if freeA != freeB {
-			if freeA {
-				return -1
-			}
-			return 1
-		}
+	slices.SortFunc(sessions, sessionLess)
+}
 
-		// Alphabetical by host
-		if c := cmp.Compare(a.Host, b.Host); c != 0 {
-			return c
-		}
+// sessionLess compares two sessions for sorting: FREE before DOCKED,
+// then alphabetical by host, then by name.
+func sessionLess(a, b Session) int {
+	if c := cmp.Compare(attachedRank(a), attachedRank(b)); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(a.Host, b.Host); c != 0 {
+		return c
+	}
+	return cmp.Compare(a.Name, b.Name)
+}
 
-		// Alphabetical by name
-		return cmp.Compare(a.Name, b.Name)
-	})
+// attachedRank returns 0 for FREE sessions and 1 for DOCKED, so FREE sorts first.
+func attachedRank(s Session) int {
+	if s.Attached == 0 {
+		return 0
+	}
+	return 1
 }
 
 // visibleRows returns the number of session rows that fit on screen,

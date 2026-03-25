@@ -111,93 +111,114 @@ func (m Model) maxHostWidth() int {
 func (m Model) renderRow(idx int) string {
 	s := m.filtered[idx]
 	selected := idx == m.cursor
-	w := m.width
 
-	// Selector column.
-	sel := "  "
-	if selected {
-		sel = selectorStyle.Render("> ")
-	}
-
-	// Host column — adaptive, with fuzzy highlight support.
-	host := m.renderHostColumn(s, w)
-
-	// Session name — apply fuzzy highlights if available.
+	sel := renderSelector(selected)
+	host := m.renderHostColumn(s, m.width)
 	name := m.renderSessionName(s)
+	badge := renderBadge(s, m.width)
+	wins := renderWindows(s, m.width)
 
-	// Badge column — adaptive.
-	var badge string
-	if w >= 80 {
-		// Full badge with text.
-		if s.Attached == 0 {
-			badge = freeBadgeStyle.Render("○ FREE")
-		} else {
-			badge = dockedBadgeStyle.Render("● DOCKED")
-		}
-	} else {
-		// Compact: dot only.
-		if s.Attached == 0 {
-			badge = freeBadgeStyle.Render("○")
-		} else {
-			badge = dockedBadgeStyle.Render("●")
-		}
-	}
+	row := composeRow(sel, host, name, badge, wins)
+	return applyRowSelection(row, selected, m.width)
+}
 
-	// Window count — hide below width 60.
-	wins := ""
-	if w >= 60 {
-		wins = windowStyle.Render(fmt.Sprintf("w%d", s.Windows))
-	}
-
-	// Compose the row.
-	var row string
-	if wins != "" {
-		row = fmt.Sprintf("%s %s %s  %s  %s", sel, host, name, badge, wins)
-	} else {
-		row = fmt.Sprintf("%s %s %s  %s", sel, host, name, badge)
-	}
-
-	// Apply row background for selected row.
+// renderSelector returns the cursor indicator for a row.
+func renderSelector(selected bool) string {
 	if selected {
-		// Pad to full width so the background extends.
-		rowWidth := lipgloss.Width(row)
-		if rowWidth < m.width {
-			row += strings.Repeat(" ", m.width-rowWidth)
-		}
-		row = selectedRowStyle.Render(row)
+		return selectorStyle.Render("> ")
 	}
+	return "  "
+}
 
-	return row
+// renderBadge returns the status badge adapted to terminal width.
+func renderBadge(s Session, termWidth int) string {
+	if termWidth >= 80 {
+		return renderFullBadge(s)
+	}
+	return renderCompactBadge(s)
+}
+
+// renderFullBadge returns a badge with dot and text label.
+func renderFullBadge(s Session) string {
+	if s.Attached == 0 {
+		return freeBadgeStyle.Render("○ FREE")
+	}
+	return dockedBadgeStyle.Render("● DOCKED")
+}
+
+// renderCompactBadge returns a dot-only badge.
+func renderCompactBadge(s Session) string {
+	if s.Attached == 0 {
+		return freeBadgeStyle.Render("○")
+	}
+	return dockedBadgeStyle.Render("●")
+}
+
+// renderWindows returns the window count string, or empty below width 60.
+func renderWindows(s Session, termWidth int) string {
+	if termWidth >= 60 {
+		return windowStyle.Render(fmt.Sprintf("w%d", s.Windows))
+	}
+	return ""
+}
+
+// composeRow joins the columns into a single row string.
+func composeRow(sel, host, name, badge, wins string) string {
+	if wins != "" {
+		return fmt.Sprintf("%s %s %s  %s  %s", sel, host, name, badge, wins)
+	}
+	return fmt.Sprintf("%s %s %s  %s", sel, host, name, badge)
+}
+
+// applyRowSelection pads and highlights the row if it is selected.
+func applyRowSelection(row string, selected bool, width int) string {
+	if !selected {
+		return row
+	}
+	rowWidth := lipgloss.Width(row)
+	if rowWidth < width {
+		row += strings.Repeat(" ", width-rowWidth)
+	}
+	return selectedRowStyle.Render(row)
 }
 
 // renderHostColumn renders the host label with adaptive width and fuzzy highlights.
 func (m Model) renderHostColumn(s Session, termWidth int) string {
-	hostW := m.maxHostWidth()
 	hostText := s.HostShort
-
-	// Build a set of matched positions in the host portion.
-	mi := m.matchInfo[s.Key()]
-	hostMatchSet := make(map[int]bool)
-	for _, idx := range mi.indexes {
-		if idx >= 0 && idx < len(s.HostShort) {
-			hostMatchSet[idx] = true
-		}
-	}
+	hostMatchSet := m.hostMatchSet(s)
 
 	if termWidth < 45 {
-		// 3-char prefix, no brackets.
-		if len(hostText) > 3 {
-			hostText = hostText[:3]
-		}
-		return renderHighlightedString(hostText, hostMatchSet, hostStyle, matchHighlightStyle)
+		return renderNarrowHost(hostText, hostMatchSet)
 	}
+	return renderBracketedHost(hostText, hostMatchSet, m.maxHostWidth())
+}
 
-	// Bracketed, padded to widest host.
-	// Build: "[" + highlighted host + padding + "]"
+// hostMatchSet returns the set of character positions in the host that
+// matched the current filter.
+func (m Model) hostMatchSet(s Session) map[int]bool {
+	mi := m.matchInfo[s.Key()]
+	set := make(map[int]bool)
+	for _, idx := range mi.indexes {
+		if idx >= 0 && idx < len(s.HostShort) {
+			set[idx] = true
+		}
+	}
+	return set
+}
+
+// renderNarrowHost renders a 3-char prefix host without brackets.
+func renderNarrowHost(hostText string, matchSet map[int]bool) string {
+	if len(hostText) > 3 {
+		hostText = hostText[:3]
+	}
+	return renderHighlightedString(hostText, matchSet, hostStyle, matchHighlightStyle)
+}
+
+// renderBracketedHost renders "[host]" padded to hostW width.
+func renderBracketedHost(hostText string, matchSet map[int]bool, hostW int) string {
 	var b strings.Builder
 	b.WriteString(hostStyle.Render("["))
-	b.WriteString(renderHighlightedString(hostText, hostMatchSet, hostStyle, matchHighlightStyle))
-	// Pad to hostW width.
+	b.WriteString(renderHighlightedString(hostText, matchSet, hostStyle, matchHighlightStyle))
 	if pad := hostW - len(hostText); pad > 0 {
 		b.WriteString(strings.Repeat(" ", pad))
 	}
@@ -227,20 +248,23 @@ func (m Model) renderSessionName(s Session) string {
 	if !ok || len(mi.indexes) == 0 {
 		return sessionNameStyle.Render(s.Name)
 	}
+	nameMatchSet := m.nameMatchSet(s, mi)
+	return renderHighlightedString(s.Name, nameMatchSet, sessionNameStyle, matchHighlightStyle)
+}
 
-	// Build a set of matched positions in the session name.
-	// The matchInfo indexes are relative to "hostShort/name", so we need
-	// to offset them by len(hostShort)+1 to find matches within the name.
-	prefix := len(s.HostShort) + 1 // "hostShort/"
-	nameMatchSet := make(map[int]bool)
+// nameMatchSet builds a set of character positions within the session name
+// that matched the filter. The matchInfo indexes are relative to "hostShort/name",
+// so they are offset by len(hostShort)+1.
+func (m Model) nameMatchSet(s Session, mi matchInfo) map[int]bool {
+	prefix := len(s.HostShort) + 1
+	set := make(map[int]bool)
 	for _, idx := range mi.indexes {
 		nameIdx := idx - prefix
 		if nameIdx >= 0 && nameIdx < len(s.Name) {
-			nameMatchSet[nameIdx] = true
+			set[nameIdx] = true
 		}
 	}
-
-	return renderHighlightedString(s.Name, nameMatchSet, sessionNameStyle, matchHighlightStyle)
+	return set
 }
 
 // renderFooter builds the context-sensitive footer.

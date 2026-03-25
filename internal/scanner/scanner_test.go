@@ -21,6 +21,29 @@ func withFakeSSH(t *testing.T, script string) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
+func assertSessionStrings(t *testing.T, got Session, wantHost, wantHostShort, wantName string) {
+	t.Helper()
+	if got.Host != wantHost {
+		t.Errorf("Host = %q, want %q", got.Host, wantHost)
+	}
+	if got.HostShort != wantHostShort {
+		t.Errorf("HostShort = %q, want %q", got.HostShort, wantHostShort)
+	}
+	if got.Name != wantName {
+		t.Errorf("Name = %q, want %q", got.Name, wantName)
+	}
+}
+
+func assertSessionInts(t *testing.T, got Session, wantAttached, wantWindows int) {
+	t.Helper()
+	if got.Attached != wantAttached {
+		t.Errorf("Attached = %d, want %d", got.Attached, wantAttached)
+	}
+	if got.Windows != wantWindows {
+		t.Errorf("Windows = %d, want %d", got.Windows, wantWindows)
+	}
+}
+
 func TestScanHost_Success(t *testing.T) {
 	// Fake ssh prints two valid sessions in tmux list-sessions format.
 	withFakeSSH(t, `#!/bin/sh
@@ -38,40 +61,21 @@ printf 'build\t0\t1\n'
 		t.Fatalf("got %d sessions, want 2", len(sessions))
 	}
 
-	// First session.
-	s := sessions[0]
-	if s.Host != "clint@indigo" {
-		t.Errorf("Host = %q, want %q", s.Host, "clint@indigo")
-	}
-	if s.HostShort != "indigo" {
-		t.Errorf("HostShort = %q, want %q", s.HostShort, "indigo")
-	}
-	if s.Name != "cjdos" {
-		t.Errorf("Name = %q, want %q", s.Name, "cjdos")
-	}
-	if s.Attached != 1 {
-		t.Errorf("Attached = %d, want 1", s.Attached)
-	}
-	if s.Windows != 3 {
-		t.Errorf("Windows = %d, want 3", s.Windows)
-	}
+	t.Run("first_session", func(t *testing.T) {
+		assertSessionStrings(t, sessions[0], "clint@indigo", "indigo", "cjdos")
+		assertSessionInts(t, sessions[0], 1, 3)
+	})
 
-	// Second session.
-	s = sessions[1]
-	if s.Name != "build" {
-		t.Errorf("Name = %q, want %q", s.Name, "build")
-	}
-	if s.Attached != 0 {
-		t.Errorf("Attached = %d, want 0", s.Attached)
-	}
-	if s.Windows != 1 {
-		t.Errorf("Windows = %d, want 1", s.Windows)
-	}
+	t.Run("second_session", func(t *testing.T) {
+		assertSessionStrings(t, sessions[1], "clint@indigo", "indigo", "build")
+		assertSessionInts(t, sessions[1], 0, 1)
+	})
 
-	// Verify Key().
-	if s.Key() != "clint@indigo/build" {
-		t.Errorf("Key() = %q, want %q", s.Key(), "clint@indigo/build")
-	}
+	t.Run("key", func(t *testing.T) {
+		if sessions[1].Key() != "clint@indigo/build" {
+			t.Errorf("Key() = %q, want %q", sessions[1].Key(), "clint@indigo/build")
+		}
+	})
 }
 
 func TestScanHost_NoServer(t *testing.T) {
@@ -179,20 +183,24 @@ esac
 		t.Fatalf("ScanAll returned error: %v", err)
 	}
 
-	// alpha should have 1 session.
-	if len(collected["clint@alpha"]) != 1 {
-		t.Errorf("alpha: got %d sessions, want 1", len(collected["clint@alpha"]))
-	} else if collected["clint@alpha"][0].Name != "dev" {
-		t.Errorf("alpha session name = %q, want %q", collected["clint@alpha"][0].Name, "dev")
-	}
+	t.Run("alpha_has_one_session", func(t *testing.T) {
+		assertHostCount(t, collected, "clint@alpha", 1)
+	})
 
-	// beta should have 2 sessions.
-	if len(collected["clint@beta"]) != 2 {
-		t.Errorf("beta: got %d sessions, want 2", len(collected["clint@beta"]))
-	}
+	t.Run("beta_has_two_sessions", func(t *testing.T) {
+		assertHostCount(t, collected, "clint@beta", 2)
+	})
 
-	// gamma should NOT appear (exit 1 = no sessions = no callback).
-	if _, ok := collected["clint@gamma"]; ok {
-		t.Errorf("gamma: expected no callback, but got sessions: %v", collected["clint@gamma"])
+	t.Run("gamma_not_called", func(t *testing.T) {
+		if _, ok := collected["clint@gamma"]; ok {
+			t.Errorf("gamma: expected no callback, but got sessions: %v", collected["clint@gamma"])
+		}
+	})
+}
+
+func assertHostCount(t *testing.T, collected map[string][]Session, host string, want int) {
+	t.Helper()
+	if len(collected[host]) != want {
+		t.Errorf("%s: got %d sessions, want %d", host, len(collected[host]), want)
 	}
 }

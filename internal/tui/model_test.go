@@ -4,42 +4,56 @@ import (
 	"testing"
 )
 
+func assertModelInt(t *testing.T, field string, got, want int) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s = %d, want %d", field, got, want)
+	}
+}
+
+func assertModelBool(t *testing.T, field string, got, want bool) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s = %v, want %v", field, got, want)
+	}
+}
+
+func assertModelNil(t *testing.T, field string, isNil bool) {
+	t.Helper()
+	if !isNil {
+		t.Errorf("%s should be nil", field)
+	}
+}
+
+func assertModelNotNil(t *testing.T, field string, isNil bool) {
+	t.Helper()
+	if isNil {
+		t.Errorf("%s should not be nil", field)
+	}
+}
+
 func TestNewModel(t *testing.T) {
 	m := NewModel(5)
 
-	if !m.scanning {
-		t.Error("NewModel: scanning should be true")
-	}
-	if m.scanTotal != 5 {
-		t.Errorf("NewModel: scanTotal = %d, want 5", m.scanTotal)
-	}
-	if m.scanDone != 0 {
-		t.Errorf("NewModel: scanDone = %d, want 0", m.scanDone)
-	}
-	if len(m.sessions) != 0 {
-		t.Errorf("NewModel: sessions should be empty, got %d", len(m.sessions))
-	}
-	if len(m.filtered) != 0 {
-		t.Errorf("NewModel: filtered should be empty, got %d", len(m.filtered))
-	}
-	if m.cursor != 0 {
-		t.Errorf("NewModel: cursor = %d, want 0", m.cursor)
-	}
-	if m.filtering {
-		t.Error("NewModel: filtering should be false")
-	}
-	if m.warpTarget != nil {
-		t.Error("NewModel: warpTarget should be nil")
-	}
-	if m.width != 80 {
-		t.Errorf("NewModel: width = %d, want 80", m.width)
-	}
-	if m.height != 24 {
-		t.Errorf("NewModel: height = %d, want 24", m.height)
-	}
-	if m.matchInfo == nil {
-		t.Error("NewModel: matchInfo map should be initialized")
-	}
+	t.Run("scan_state", func(t *testing.T) {
+		assertModelBool(t, "scanning", m.scanning, true)
+		assertModelInt(t, "scanTotal", m.scanTotal, 5)
+		assertModelInt(t, "scanDone", m.scanDone, 0)
+	})
+
+	t.Run("collections_empty", func(t *testing.T) {
+		assertModelInt(t, "sessions", len(m.sessions), 0)
+		assertModelInt(t, "filtered", len(m.filtered), 0)
+	})
+
+	t.Run("ui_defaults", func(t *testing.T) {
+		assertModelInt(t, "cursor", m.cursor, 0)
+		assertModelBool(t, "filtering", m.filtering, false)
+		assertModelNil(t, "warpTarget", m.warpTarget == nil)
+		assertModelInt(t, "width", m.width, 80)
+		assertModelInt(t, "height", m.height, 24)
+		assertModelNotNil(t, "matchInfo", m.matchInfo == nil)
+	})
 }
 
 func TestNewModelWithSessions(t *testing.T) {
@@ -106,6 +120,15 @@ func TestSessionKey(t *testing.T) {
 	}
 }
 
+func assertSortedSession(t *testing.T, i int, got Session, wantHost, wantName string, wantFree bool) {
+	t.Helper()
+	isFree := got.Attached == 0
+	if got.Host != wantHost || got.Name != wantName || isFree != wantFree {
+		t.Errorf("sessions[%d] = {Host:%q, Name:%q, Free:%v}, want {Host:%q, Name:%q, Free:%v}",
+			i, got.Host, got.Name, isFree, wantHost, wantName, wantFree)
+	}
+}
+
 func TestSortSessions(t *testing.T) {
 	sessions := []Session{
 		{Host: "beta", HostShort: "beta", Name: "prod", Attached: 1, Windows: 3},
@@ -117,13 +140,7 @@ func TestSortSessions(t *testing.T) {
 
 	sortSessions(sessions)
 
-	// Expected order:
-	// 1. FREE: alpha/build (FREE, alpha < beta, build < dev)
-	// 2. FREE: alpha/dev   (FREE, alpha < beta)
-	// 3. FREE: beta/staging (FREE, beta)
-	// 4. DOCKED: alpha/test (DOCKED, alpha < beta)
-	// 5. DOCKED: beta/prod  (DOCKED, beta)
-
+	// Expected order: FREE first (sorted by host, name), then DOCKED (sorted by host, name).
 	expected := []struct {
 		host string
 		name string
@@ -141,12 +158,7 @@ func TestSortSessions(t *testing.T) {
 	}
 
 	for i, want := range expected {
-		got := sessions[i]
-		isFree := got.Attached == 0
-		if got.Host != want.host || got.Name != want.name || isFree != want.free {
-			t.Errorf("sessions[%d] = {Host:%q, Name:%q, Free:%v}, want {Host:%q, Name:%q, Free:%v}",
-				i, got.Host, got.Name, isFree, want.host, want.name, want.free)
-		}
+		assertSortedSession(t, i, sessions[i], want.host, want.name, want.free)
 	}
 }
 

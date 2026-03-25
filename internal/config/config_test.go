@@ -22,23 +22,24 @@ func TestLoad_Minimal(t *testing.T) {
 		t.Fatalf("Load() returned unexpected error: %v", err)
 	}
 
-	// Verify defaults were applied
-	if cfg.Defaults.Timeout != "3s" {
-		t.Errorf("expected default timeout %q, got %q", "3s", cfg.Defaults.Timeout)
-	}
-	if cfg.Defaults.Term != "xterm-256color" {
-		t.Errorf("expected default term %q, got %q", "xterm-256color", cfg.Defaults.Term)
-	}
+	t.Run("defaults", func(t *testing.T) {
+		assertString(t, "timeout", cfg.Defaults.Timeout, "3s")
+		assertString(t, "term", cfg.Defaults.Term, "xterm-256color")
+	})
 
-	// Verify hosts were loaded
-	if len(cfg.Hosts) != 2 {
-		t.Fatalf("expected 2 hosts, got %d", len(cfg.Hosts))
-	}
-	if cfg.Hosts[0] != "server1" {
-		t.Errorf("expected host[0] %q, got %q", "server1", cfg.Hosts[0])
-	}
-	if cfg.Hosts[1] != "server2" {
-		t.Errorf("expected host[1] %q, got %q", "server2", cfg.Hosts[1])
+	t.Run("hosts", func(t *testing.T) {
+		if len(cfg.Hosts) != 2 {
+			t.Fatalf("expected 2 hosts, got %d", len(cfg.Hosts))
+		}
+		assertString(t, "host[0]", cfg.Hosts[0], "server1")
+		assertString(t, "host[1]", cfg.Hosts[1], "server2")
+	})
+}
+
+func assertString(t *testing.T, field, got, want string) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s = %q, want %q", field, got, want)
 	}
 }
 

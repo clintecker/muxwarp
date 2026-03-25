@@ -35,63 +35,73 @@ func (s Session) Key() string { return s.Host + "/" + s.Name }
 // authentication, no tmux server, or unparseable output. Only sessions
 // with valid names (per ssh.ValidSessionName) are included.
 func ScanHost(ctx context.Context, target, timeoutSec string) ([]Session, error) {
-	args := ssh.BuildScanArgs(target, timeoutSec)
-
-	// args[0] is "ssh"; exec.CommandContext resolves it via PATH.
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-
-	// Ensure Output returns promptly after the process is killed.
-	// Without WaitDelay, Output blocks until all I/O pipes close,
-	// which may not happen if the shell script spawns child processes.
-	cmd.WaitDelay = 2 * time.Second
-
-	out, err := cmd.Output()
+	out, err := runScanCmd(ctx, target, timeoutSec)
 	if err != nil {
 		// Any failure (timeout, auth, no tmux, exit code != 0) → empty.
 		return nil, nil
 	}
+	return parseSessions(out, target), nil
+}
 
+// runScanCmd builds and executes the SSH command for listing tmux sessions.
+func runScanCmd(ctx context.Context, target, timeoutSec string) ([]byte, error) {
+	args := ssh.BuildScanArgs(target, timeoutSec)
+	// args[0] is "ssh"; exec.CommandContext resolves it via PATH.
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	// Ensure Output returns promptly after the process is killed.
+	// Without WaitDelay, Output blocks until all I/O pipes close,
+	// which may not happen if the shell script spawns child processes.
+	cmd.WaitDelay = 2 * time.Second
+	return cmd.Output()
+}
+
+// parseSessions parses raw tmux list-sessions output into Session values.
+// Lines that are empty, malformed, or have invalid session names are skipped.
+func parseSessions(out []byte, target string) []Session {
 	hostShort := ssh.HostShort(target)
-
 	var sessions []Session
 	sc := bufio.NewScanner(strings.NewReader(string(out)))
 	for sc.Scan() {
-		line := sc.Text()
-		if line == "" {
-			continue
+		if s, ok := parseSessionLine(sc.Text(), target, hostShort); ok {
+			sessions = append(sessions, s)
 		}
-
-		parts := strings.SplitN(line, "\t", 3)
-		if len(parts) != 3 {
-			continue
-		}
-
-		name := parts[0]
-		if !ssh.ValidSessionName(name) {
-			continue
-		}
-
-		attached, err := strconv.Atoi(parts[1])
-		if err != nil {
-			continue
-		}
-
-		windows, err := strconv.Atoi(parts[2])
-		if err != nil {
-			continue
-		}
-
-		sessions = append(sessions, Session{
-			Host:      target,
-			HostShort: hostShort,
-			Name:      name,
-			Attached:  attached,
-			Windows:   windows,
-		})
 	}
+	return sessions
+}
 
-	// Return nil slice when nothing found — callers check len().
-	return sessions, nil
+// splitSessionFields splits a tab-separated line into (name, attached, windows).
+// Returns false if the line is empty, has the wrong number of fields, or
+// contains an invalid session name.
+func splitSessionFields(line string) (name string, attached, windows int, ok bool) {
+	parts := strings.SplitN(line, "\t", 3)
+	if len(parts) != 3 || !ssh.ValidSessionName(parts[0]) {
+		return "", 0, 0, false
+	}
+	a, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return "", 0, 0, false
+	}
+	w, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return "", 0, 0, false
+	}
+	return parts[0], a, w, true
+}
+
+// parseSessionLine parses a single tab-separated line into a Session.
+// Returns false if the line is empty, malformed, or has an invalid name.
+func parseSessionLine(line, target, hostShort string) (Session, bool) {
+	name, attached, windows, ok := splitSessionFields(line)
+	if !ok {
+		return Session{}, false
+	}
+	return Session{
+		Host:      target,
+		HostShort: hostShort,
+		Name:      name,
+		Attached:  attached,
+		Windows:   windows,
+	}, true
 }
 
 // ScanAll probes multiple hosts in parallel with bounded concurrency.
@@ -106,29 +116,28 @@ func ScanAll(ctx context.Context, hosts []string, maxParallel int, timeoutSec st
 	var wg sync.WaitGroup
 
 	for _, host := range hosts {
-		// Stop launching new work if context is cancelled.
-		select {
-		case <-ctx.Done():
-			break
-		default:
-		}
-
 		wg.Go(func() {
-			// Acquire semaphore slot.
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-ctx.Done():
-				return
-			}
-
-			sessions, _ := ScanHost(ctx, host, timeoutSec)
-			if len(sessions) > 0 {
-				onBatch(host, sessions)
-			}
+			scanOneHost(ctx, host, timeoutSec, sem, onBatch)
 		})
 	}
 
 	wg.Wait()
 	return nil
+}
+
+// scanOneHost acquires a semaphore slot, scans a single host, and calls
+// onBatch if sessions are found.
+func scanOneHost(ctx context.Context, host, timeoutSec string, sem chan struct{}, onBatch func(string, []Session)) {
+	// Acquire semaphore slot, respecting context cancellation.
+	select {
+	case sem <- struct{}{}:
+		defer func() { <-sem }()
+	case <-ctx.Done():
+		return
+	}
+
+	sessions, _ := ScanHost(ctx, host, timeoutSec)
+	if len(sessions) > 0 {
+		onBatch(host, sessions)
+	}
 }

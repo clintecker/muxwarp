@@ -88,6 +88,20 @@ func TestSmokeV2NewView(t *testing.T) {
 	}
 }
 
+func assertSmokeString(t *testing.T, field, got, want string) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s = %q, want %q", field, got, want)
+	}
+}
+
+func assertSmokeBool(t *testing.T, field string, got, want bool) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s = %v, want %v", field, got, want)
+	}
+}
+
 // TestSmokeV2ViewFields proves the View struct has the key fields we need.
 func TestSmokeV2ViewFields(t *testing.T) {
 	v := tea.NewView("test content")
@@ -96,20 +110,13 @@ func TestSmokeV2ViewFields(t *testing.T) {
 	v.MouseMode = tea.MouseModeCellMotion
 	v.ReportFocus = true
 
-	if v.Content != "test content" {
-		t.Errorf("Content = %q, want %q", v.Content, "test content")
-	}
-	if !v.AltScreen {
-		t.Error("AltScreen not set")
-	}
-	if v.WindowTitle != "muxwarp" {
-		t.Errorf("WindowTitle = %q, want %q", v.WindowTitle, "muxwarp")
-	}
+	assertSmokeString(t, "Content", v.Content, "test content")
+	assertSmokeBool(t, "AltScreen", v.AltScreen, true)
+	assertSmokeString(t, "WindowTitle", v.WindowTitle, "muxwarp")
+	assertSmokeBool(t, "ReportFocus", v.ReportFocus, true)
+
 	if v.MouseMode != tea.MouseModeCellMotion {
 		t.Error("MouseMode not set to CellMotion")
-	}
-	if !v.ReportFocus {
-		t.Error("ReportFocus not set")
 	}
 }
 

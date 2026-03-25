@@ -33,20 +33,31 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
-	// Apply defaults for missing fields.
+	applyDefaults(&cfg)
+
+	if err := validate(&cfg); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
+}
+
+// applyDefaults fills in missing configuration fields with sensible defaults.
+func applyDefaults(cfg *Config) {
 	if cfg.Defaults.Timeout == "" {
 		cfg.Defaults.Timeout = "3s"
 	}
 	if cfg.Defaults.Term == "" {
 		cfg.Defaults.Term = "xterm-256color"
 	}
+}
 
-	// Validate.
+// validate checks that the configuration is usable.
+func validate(cfg *Config) error {
 	if len(cfg.Hosts) == 0 {
-		return nil, fmt.Errorf("no hosts configured")
+		return fmt.Errorf("no hosts configured")
 	}
-
-	return &cfg, nil
+	return nil
 }
 
 // DefaultPath returns the default location for the muxwarp config file.

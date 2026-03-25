@@ -50,6 +50,13 @@ func TestWindowSizeMsg(t *testing.T) {
 	}
 }
 
+func assertUpdateInt(t *testing.T, field string, got, want int) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s = %d, want %d", field, got, want)
+	}
+}
+
 func TestSessionBatchMsg(t *testing.T) {
 	m := newTestModel(2)
 
@@ -61,38 +68,31 @@ func TestSessionBatchMsg(t *testing.T) {
 		},
 	}
 
-	newM, cmd := m.Update(batch)
-	m = newM.(Model)
+	t.Run("first_batch", func(t *testing.T) {
+		newM, cmd := m.Update(batch)
+		m = newM.(Model)
 
-	if cmd != nil {
-		t.Error("SessionBatchMsg should not produce a command")
-	}
-	if len(m.sessions) != 2 {
-		t.Errorf("sessions = %d, want 2", len(m.sessions))
-	}
-	if m.scanDone != 1 {
-		t.Errorf("scanDone = %d, want 1", m.scanDone)
-	}
-	if len(m.filtered) != 2 {
-		t.Errorf("filtered = %d, want 2", len(m.filtered))
-	}
+		if cmd != nil {
+			t.Error("SessionBatchMsg should not produce a command")
+		}
+		assertUpdateInt(t, "sessions", len(m.sessions), 2)
+		assertUpdateInt(t, "scanDone", m.scanDone, 1)
+		assertUpdateInt(t, "filtered", len(m.filtered), 2)
+	})
 
-	// Second batch.
-	batch2 := SessionBatchMsg{
-		Host: "beta",
-		Sessions: []Session{
-			{Host: "beta", HostShort: "beta", Name: "staging", Attached: 0, Windows: 2},
-		},
-	}
-	newM, _ = m.Update(batch2)
-	m = newM.(Model)
+	t.Run("second_batch", func(t *testing.T) {
+		batch2 := SessionBatchMsg{
+			Host: "beta",
+			Sessions: []Session{
+				{Host: "beta", HostShort: "beta", Name: "staging", Attached: 0, Windows: 2},
+			},
+		}
+		newM, _ := m.Update(batch2)
+		m = newM.(Model)
 
-	if len(m.sessions) != 3 {
-		t.Errorf("sessions = %d, want 3", len(m.sessions))
-	}
-	if m.scanDone != 2 {
-		t.Errorf("scanDone = %d, want 2", m.scanDone)
-	}
+		assertUpdateInt(t, "sessions", len(m.sessions), 3)
+		assertUpdateInt(t, "scanDone", m.scanDone, 2)
+	})
 }
 
 func TestScanDoneMsg(t *testing.T) {
@@ -233,6 +233,27 @@ func TestFilterMode_TypingAddsToFilterText(t *testing.T) {
 	}
 }
 
+func assertUpdateBool(t *testing.T, field string, got, want bool) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s = %v, want %v", field, got, want)
+	}
+}
+
+func assertUpdateString(t *testing.T, field, got, want string) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s = %q, want %q", field, got, want)
+	}
+}
+
+func assertNoCmd(t *testing.T, label string, cmd tea.Cmd) {
+	t.Helper()
+	if cmd != nil {
+		t.Errorf("%s should not return a command", label)
+	}
+}
+
 func TestFilterMode_EscapeClearsFilter(t *testing.T) {
 	m := newTestModelWithSessions()
 
@@ -243,27 +264,16 @@ func TestFilterMode_EscapeClearsFilter(t *testing.T) {
 	newM, _ = m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	m = newM.(Model)
 
-	if m.filterText != "d" {
-		t.Fatalf("filterText = %q, want %q", m.filterText, "d")
-	}
+	assertUpdateString(t, "filterText", m.filterText, "d")
 
 	// Press Escape.
 	newM, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = newM.(Model)
 
-	if m.filtering {
-		t.Error("Escape should exit filter mode")
-	}
-	if m.filterText != "" {
-		t.Errorf("Escape should clear filterText, got %q", m.filterText)
-	}
-	if cmd != nil {
-		t.Error("Escape in filter mode should not return a command")
-	}
-	// All sessions should be shown again.
-	if len(m.filtered) != len(m.sessions) {
-		t.Errorf("after Escape, filtered = %d, sessions = %d", len(m.filtered), len(m.sessions))
-	}
+	assertUpdateBool(t, "filtering", m.filtering, false)
+	assertUpdateString(t, "filterText", m.filterText, "")
+	assertNoCmd(t, "Escape", cmd)
+	assertUpdateInt(t, "filtered", len(m.filtered), len(m.sessions))
 }
 
 func TestFilterMode_BackspaceRemovesLastRune(t *testing.T) {
@@ -315,44 +325,34 @@ func TestFilterMode_EnterWarpsToFiltered(t *testing.T) {
 	}
 }
 
+func pressKey(t *testing.T, m Model, code rune) Model {
+	t.Helper()
+	newM, _ := m.Update(tea.KeyPressMsg{Code: code})
+	return newM.(Model)
+}
+
+func assertCursor(t *testing.T, label string, m Model, want int) {
+	t.Helper()
+	if m.cursor != want {
+		t.Errorf("%s: cursor = %d, want %d", label, m.cursor, want)
+	}
+}
+
 func TestKeyNavigation_UpDown(t *testing.T) {
 	m := newTestModelWithSessions()
+	assertCursor(t, "initial", m, 0)
 
-	if m.cursor != 0 {
-		t.Fatalf("initial cursor = %d, want 0", m.cursor)
-	}
+	m = pressKey(t, m, tea.KeyDown)
+	assertCursor(t, "after down", m, 1)
 
-	// Press down.
-	newM, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	m = newM.(Model)
+	m = pressKey(t, m, tea.KeyDown)
+	assertCursor(t, "after second down", m, 2)
 
-	if m.cursor != 1 {
-		t.Errorf("after down, cursor = %d, want 1", m.cursor)
-	}
+	m = pressKey(t, m, tea.KeyDown)
+	assertCursor(t, "clamp at end", m, 2)
 
-	// Press down again.
-	newM, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	m = newM.(Model)
-
-	if m.cursor != 2 {
-		t.Errorf("after second down, cursor = %d, want 2", m.cursor)
-	}
-
-	// Press down at end: should clamp to last.
-	newM, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	m = newM.(Model)
-
-	if m.cursor != 2 {
-		t.Errorf("cursor should clamp at end, got %d, want 2", m.cursor)
-	}
-
-	// Press up.
-	newM, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
-	m = newM.(Model)
-
-	if m.cursor != 1 {
-		t.Errorf("after up, cursor = %d, want 1", m.cursor)
-	}
+	m = pressKey(t, m, tea.KeyUp)
+	assertCursor(t, "after up", m, 1)
 }
 
 func TestKeyNavigation_JK(t *testing.T) {

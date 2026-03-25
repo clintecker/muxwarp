@@ -53,95 +53,121 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // handleNormalKey processes keys in normal (non-filter) mode.
 func (m Model) handleNormalKey(key string) (tea.Model, tea.Cmd) {
+	if delta, ok := cursorDelta(key); ok {
+		return m.handleCursorMove(delta)
+	}
+	return m.handleNormalAction(key)
+}
+
+// handleNormalAction dispatches non-cursor keys in normal mode.
+func (m Model) handleNormalAction(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "q":
 		return m, tea.Quit
-
-	case "up", "k":
-		m.moveCursor(-1)
-		return m, nil
-
-	case "down", "j":
-		m.moveCursor(1)
-		return m, nil
-
 	case "enter":
-		if len(m.filtered) > 0 && m.cursor >= 0 && m.cursor < len(m.filtered) {
-			s := m.filtered[m.cursor]
-			m.warpTarget = &s
-			return m, tea.Quit
-		}
-		return m, nil
-
+		return m.handleWarp()
 	case "/":
-		m.filtering = true
-		return m, nil
-
+		return m.handleEnterFilter()
 	case "r":
-		// Rescan: reset to scanning state. The real scanner will wire in
-		// a command here. For now, we just toggle the visual state.
-		m.scanning = true
-		m.scanDone = 0
-		m.scanTotal = 5 // fake
-		return m, nil
+		return m.handleRescan()
 	}
+	return m, nil
+}
 
+// cursorDelta maps navigation keys to cursor movement deltas.
+func cursorDelta(key string) (int, bool) {
+	switch key {
+	case "up", "k":
+		return -1, true
+	case "down", "j":
+		return 1, true
+	}
+	return 0, false
+}
+
+// handleCursorMove adjusts the cursor by delta and returns the updated model.
+func (m Model) handleCursorMove(delta int) (tea.Model, tea.Cmd) {
+	m.moveCursor(delta)
+	return m, nil
+}
+
+// handleWarp selects the current session and triggers quit.
+func (m Model) handleWarp() (tea.Model, tea.Cmd) {
+	if len(m.filtered) > 0 && m.cursor >= 0 && m.cursor < len(m.filtered) {
+		s := m.filtered[m.cursor]
+		m.warpTarget = &s
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+// handleEnterFilter switches to filter mode.
+func (m Model) handleEnterFilter() (tea.Model, tea.Cmd) {
+	m.filtering = true
+	return m, nil
+}
+
+// handleRescan resets the scanning state for a rescan.
+func (m Model) handleRescan() (tea.Model, tea.Cmd) {
+	m.scanning = true
+	m.scanDone = 0
+	m.scanTotal = 5 // fake
 	return m, nil
 }
 
 // handleFilterKey processes keys while the filter input is active.
 func (m Model) handleFilterKey(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd) {
+	if delta, ok := cursorDelta(key); ok {
+		return m.handleCursorMove(delta)
+	}
+	return m.handleFilterAction(msg, key)
+}
+
+// handleFilterAction dispatches non-cursor keys in filter mode.
+func (m Model) handleFilterAction(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
-		m.filtering = false
-		m.filterText = ""
+		return m.handleFilterEsc()
+	case "enter":
+		return m.handleWarp()
+	case "backspace":
+		return m.handleFilterBackspace()
+	default:
+		return m.handleFilterInput(msg, key)
+	}
+}
+
+// handleFilterEsc exits filter mode and clears the filter text.
+func (m Model) handleFilterEsc() (tea.Model, tea.Cmd) {
+	m.filtering = false
+	m.filterText = ""
+	m.applyFilter()
+	m.updateSelectedKey()
+	return m, nil
+}
+
+// handleFilterBackspace removes the last rune from the filter text.
+func (m Model) handleFilterBackspace() (tea.Model, tea.Cmd) {
+	if len(m.filterText) > 0 {
+		_, size := utf8.DecodeLastRuneInString(m.filterText)
+		m.filterText = m.filterText[:len(m.filterText)-size]
 		m.applyFilter()
 		m.updateSelectedKey()
-		return m, nil
-
-	case "enter":
-		// Warp to the selected session even while filtering.
-		if len(m.filtered) > 0 && m.cursor >= 0 && m.cursor < len(m.filtered) {
-			s := m.filtered[m.cursor]
-			m.warpTarget = &s
-			return m, tea.Quit
-		}
-		return m, nil
-
-	case "up", "k":
-		m.moveCursor(-1)
-		return m, nil
-
-	case "down", "j":
-		m.moveCursor(1)
-		return m, nil
-
-	case "backspace":
-		if len(m.filterText) > 0 {
-			// Remove last rune.
-			_, size := utf8.DecodeLastRuneInString(m.filterText)
-			m.filterText = m.filterText[:len(m.filterText)-size]
-			m.applyFilter()
-			m.updateSelectedKey()
-		}
-		return m, nil
-
-	default:
-		// Only accept printable characters (the Text field has the typed rune).
-		if msg.Text != "" && key != "space" {
-			m.filterText += msg.Text
-			m.applyFilter()
-			m.updateSelectedKey()
-			return m, nil
-		}
-		if key == "space" {
-			m.filterText += " "
-			m.applyFilter()
-			m.updateSelectedKey()
-			return m, nil
-		}
 	}
+	return m, nil
+}
 
+// handleFilterInput appends a typed character to the filter text.
+func (m Model) handleFilterInput(msg tea.KeyPressMsg, key string) (tea.Model, tea.Cmd) {
+	text := msg.Text
+	if key == "space" {
+		text = " "
+	}
+	if text != "" {
+		m.filterText += text
+		m.applyFilter()
+		m.updateSelectedKey()
+	}
 	return m, nil
 }
 
