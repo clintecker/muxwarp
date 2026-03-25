@@ -1,0 +1,33 @@
+# muxwarp configuration
+# Copy this file to ~/.muxwarp.config.yaml and edit to taste.
+
+# defaults: optional settings applied to all hosts.
+# Everything here has a sensible default -- you can omit this entire section.
+defaults:
+  # Per-host SSH connect timeout. If a host doesn't respond within this
+  # window, it's silently skipped. Parsed as a Go duration string.
+  # Default: 3s
+  timeout: 3s
+
+  # TERM environment variable set on the remote when attaching to tmux.
+  # Change this if your remote .tmux.conf expects a different value.
+  # Default: xterm-256color
+  term: xterm-256color
+
+# hosts: list of SSH targets to scan for tmux sessions.
+# Each entry is passed directly to your system ssh binary, so anything
+# that works with `ssh <target>` works here. That means ~/.ssh/config
+# aliases, user@host, bare hostnames, IPs -- all valid.
+hosts:
+  # Simple user@host format
+  - clint@indigo
+  - clint@devboi
+
+  # Bare hostname (uses your SSH config for user, key, etc.)
+  # - workstation
+
+  # IP address
+  # - root@192.168.1.50
+
+  # SSH config alias (defined in ~/.ssh/config)
+  # - my-jump-host
