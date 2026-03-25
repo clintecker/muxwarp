@@ -1,0 +1,27 @@
+run:
+  timeout: 3m
+
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - gosimple
+    - errcheck
+    - ineffassign
+    - unused
+    - gocritic
+    - revive
+    - gosec
+    - misspell
+
+issues:
+  exclude-rules:
+    # G204: allow subprocess calls in scanner and ssh packages
+    - path: internal/ssh/
+      linters:
+        - gosec
+      text: "G204"
+    - path: internal/scanner/
+      linters:
+        - gosec
+      text: "G204"
