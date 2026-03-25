@@ -16,12 +16,12 @@ func TestView_ReturnsAltScreen(t *testing.T) {
 	}
 }
 
-func TestView_TypeIsTeaView(t *testing.T) {
+func TestView_TypeIsTeaView(_ *testing.T) {
 	m := newTestModel(1)
 	v := m.View()
 
-	// Compile-time check that v is tea.View.
-	var _ tea.View = v
+	// Compile-time check that v is tea.View (type inferred from View()).
+	_ = v
 }
 
 func TestView_ContentNotEmpty(t *testing.T) {

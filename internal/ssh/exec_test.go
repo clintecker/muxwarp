@@ -58,48 +58,36 @@ func TestBuildScanArgs(t *testing.T) {
 	args := BuildScanArgs("clint@indigo", "3")
 
 	// Must contain ConnectTimeout and BatchMode.
-	var hasTimeout, hasBatch bool
-	for i, a := range args {
-		if a == "-o" && i+1 < len(args) {
-			switch args[i+1] {
-			case "ConnectTimeout=3":
-				hasTimeout = true
-			case "BatchMode=yes":
-				hasBatch = true
-			}
-		}
-	}
-
-	if !hasTimeout {
-		t.Errorf("BuildScanArgs missing ConnectTimeout: %v", args)
-	}
-	if !hasBatch {
-		t.Errorf("BuildScanArgs missing BatchMode=yes: %v", args)
-	}
+	assertArgHasSSHOption(t, args, "ConnectTimeout=3")
+	assertArgHasSSHOption(t, args, "BatchMode=yes")
 
 	// Must contain target.
-	found := false
-	for _, a := range args {
-		if a == "clint@indigo" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("BuildScanArgs missing target: %v", args)
-	}
+	assertArgContains(t, args, "clint@indigo", "target")
 
 	// Must contain the tmux list-sessions format string.
-	foundFmt := false
-	for _, a := range args {
-		if a == "#{session_name}\t#{session_attached}\t#{session_windows}" {
-			foundFmt = true
-			break
+	assertArgContains(t, args, "#{session_name}\t#{session_attached}\t#{session_windows}", "tmux format string")
+}
+
+// assertArgHasSSHOption checks that args contains "-o" followed by the expected option value.
+func assertArgHasSSHOption(t *testing.T, args []string, option string) {
+	t.Helper()
+	for i, a := range args {
+		if a == "-o" && i+1 < len(args) && args[i+1] == option {
+			return
 		}
 	}
-	if !foundFmt {
-		t.Errorf("BuildScanArgs missing tmux format string: %v", args)
+	t.Errorf("BuildScanArgs missing -o %s: %v", option, args)
+}
+
+// assertArgContains checks that args contains the expected value.
+func assertArgContains(t *testing.T, args []string, value, label string) {
+	t.Helper()
+	for _, a := range args {
+		if a == value {
+			return
+		}
 	}
+	t.Errorf("BuildScanArgs missing %s (%q): %v", label, value, args)
 }
 
 func TestHostShort(t *testing.T) {

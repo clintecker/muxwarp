@@ -8,7 +8,7 @@ LDFLAGS    := -s -w \
               -X main.commit=$(COMMIT) \
               -X main.date=$(DATE)
 
-.PHONY: all build lint test clean run
+.PHONY: all build lint test clean run check hooks
 
 all: lint test build
 
@@ -27,3 +27,10 @@ clean:
 
 run: build
 	./$(BIN_DIR)/$(APP_NAME)
+
+check: lint test
+	@echo "All checks passed"
+
+hooks:
+	git config core.hooksPath .githooks
+	@echo "Git hooks installed"

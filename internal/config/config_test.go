@@ -13,7 +13,7 @@ func TestLoad_Minimal(t *testing.T) {
 	cfgPath := filepath.Join(dir, "config.yaml")
 
 	content := []byte("hosts:\n  - server1\n  - server2\n")
-	if err := os.WriteFile(cfgPath, content, 0644); err != nil {
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -53,7 +53,7 @@ func TestLoad_WithDefaults(t *testing.T) {
 hosts:
   - server1
 `)
-	if err := os.WriteFile(cfgPath, content, 0644); err != nil {
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -84,7 +84,7 @@ func TestLoad_EmptyHosts(t *testing.T) {
 	cfgPath := filepath.Join(dir, "config.yaml")
 
 	content := []byte("hosts: []\n")
-	if err := os.WriteFile(cfgPath, content, 0644); err != nil {
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -103,7 +103,7 @@ func TestLoad_MalformedYAML(t *testing.T) {
 	cfgPath := filepath.Join(dir, "config.yaml")
 
 	content := []byte("{{{{not valid yaml at all\n")
-	if err := os.WriteFile(cfgPath, content, 0644); err != nil {
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
 

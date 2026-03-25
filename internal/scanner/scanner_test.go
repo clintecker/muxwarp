@@ -14,7 +14,7 @@ import (
 func withFakeSSH(t *testing.T, script string) {
 	t.Helper()
 	dir := t.TempDir()
-	err := os.WriteFile(filepath.Join(dir, "ssh"), []byte(script), 0o755)
+	err := os.WriteFile(filepath.Join(dir, "ssh"), []byte(script), 0o755) //nolint:gosec // fake ssh must be executable
 	if err != nil {
 		t.Fatalf("writing fake ssh: %v", err)
 	}

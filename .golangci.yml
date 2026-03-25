@@ -1,27 +1,48 @@
-run:
-  timeout: 3m
-
+version: "2"
 linters:
   enable:
-    - govet
-    - staticcheck
-    - gosimple
-    - errcheck
-    - ineffassign
-    - unused
+    - cyclop
+    - funlen
+    - gocognit
     - gocritic
-    - revive
+    - gocyclo
     - gosec
     - misspell
-
-issues:
-  exclude-rules:
-    # G204: allow subprocess calls in scanner and ssh packages
-    - path: internal/ssh/
-      linters:
-        - gosec
-      text: "G204"
-    - path: internal/scanner/
-      linters:
-        - gosec
-      text: "G204"
+    - revive
+  settings:
+    cyclop:
+      max-complexity: 15
+    funlen:
+      lines: 80
+      statements: 50
+    gocognit:
+      min-complexity: 15
+    gocyclo:
+      min-complexity: 15
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - gosec
+        path: internal/ssh/
+        text: G204
+      - linters:
+          - gosec
+        path: internal/scanner/
+        text: G204
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

@@ -41,8 +41,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
 	// Global keys that work in any mode.
-	switch key {
-	case "ctrl+c":
+	if key == "ctrl+c" {
 		return m, tea.Quit
 	}
 

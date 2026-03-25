@@ -176,7 +176,7 @@ func (m Model) renderHostColumn(s Session, termWidth int) string {
 	hostText := s.HostShort
 
 	// Build a set of matched positions in the host portion.
-	mi, _ := m.matchInfo[s.Key()]
+	mi := m.matchInfo[s.Key()]
 	hostMatchSet := make(map[int]bool)
 	for _, idx := range mi.indexes {
 		if idx >= 0 && idx < len(s.HostShort) {

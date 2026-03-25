@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pre-commit hook for muxwarp.
+# Runs formatting, vetting, linting, tests, and coverage checks.
+
+COVERAGE_MIN=70
+
+pass() { printf "\033[32mPASS\033[0m %s\n" "$1"; }
+fail() { printf "\033[31mFAIL\033[0m %s\n" "$1"; exit 1; }
+
+# 1. Check formatting (fastest).
+echo "--- gofmt ---"
+BAD_FILES=$(gofmt -l .)
+if [ -n "$BAD_FILES" ]; then
+    echo "Files need formatting:"
+    echo "$BAD_FILES"
+    fail "gofmt"
+fi
+pass "gofmt"
+
+# 2. Vet check.
+echo "--- go vet ---"
+if ! go vet ./...; then
+    fail "go vet"
+fi
+pass "go vet"
+
+# 3. Lint (includes complexity checks).
+echo "--- golangci-lint ---"
+if ! golangci-lint run; then
+    fail "golangci-lint"
+fi
+pass "golangci-lint"
+
+# 4. Tests with race detector.
+echo "--- go test -race ---"
+if ! go test ./... -race -count=1; then
+    fail "go test -race"
+fi
+pass "go test -race"
+
+# 5. Coverage check.
+echo "--- coverage ---"
+go test ./... -coverprofile=coverage.out > /dev/null 2>&1
+COVERAGE=$(go tool cover -func=coverage.out | grep ^total: | awk '{print $3}' | tr -d '%')
+rm -f coverage.out
+
+# Compare as integers (truncate decimal).
+COV_INT=${COVERAGE%%.*}
+if [ "$COV_INT" -lt "$COVERAGE_MIN" ]; then
+    fail "coverage ${COVERAGE}% < ${COVERAGE_MIN}% minimum"
+fi
+pass "coverage ${COVERAGE}% >= ${COVERAGE_MIN}%"
+
+echo ""
+echo "All pre-commit checks passed."

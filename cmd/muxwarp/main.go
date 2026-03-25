@@ -50,14 +50,13 @@ func main() {
 // tuiMode runs the interactive TUI with background scanning.
 func tuiMode(cfg *config.Config, timeoutSec string) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	m := tui.NewModel(len(cfg.Hosts))
 	p := tea.NewProgram(m)
 
 	// Start scanning in background.
 	go func() {
-		scanner.ScanAll(ctx, cfg.Hosts, 8, timeoutSec, func(host string, sessions []scanner.Session) {
+		_ = scanner.ScanAll(ctx, cfg.Hosts, 8, timeoutSec, func(host string, sessions []scanner.Session) {
 			p.Send(tui.SessionBatchMsg{
 				Host:     host,
 				Sessions: scannerToTUI(sessions),
@@ -92,12 +91,12 @@ func directWarp(cfg *config.Config, timeoutSec, pattern string) {
 	fmt.Fprintf(os.Stderr, "Scanning gates...\n")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	var allSessions []tui.Session
-	scanner.ScanAll(ctx, cfg.Hosts, 8, timeoutSec, func(host string, sessions []scanner.Session) {
+	_ = scanner.ScanAll(ctx, cfg.Hosts, 8, timeoutSec, func(_ string, sessions []scanner.Session) {
 		allSessions = append(allSessions, scannerToTUI(sessions)...)
 	})
+	cancel()
 
 	if len(allSessions) == 0 {
 		fmt.Fprintf(os.Stderr, "No sessions found on any host.\n")
@@ -115,27 +114,31 @@ func directWarp(cfg *config.Config, timeoutSec, pattern string) {
 		warp(cfg, &matches[0])
 
 	default:
-		// Multiple matches — run the TUI pre-filtered.
-		m := tui.NewModelWithSessions(allSessions, pattern)
-		p := tea.NewProgram(m)
-		finalModel, err := p.Run()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
-			os.Exit(1)
-		}
-
-		fm, ok := finalModel.(tui.Model)
-		if !ok {
-			return
-		}
-
-		target := fm.WarpTarget()
-		if target == nil {
-			return
-		}
-
-		warp(cfg, target)
+		directWarpMultiple(cfg, allSessions, pattern)
 	}
+}
+
+// directWarpMultiple runs the TUI pre-filtered when multiple matches are found.
+func directWarpMultiple(cfg *config.Config, allSessions []tui.Session, pattern string) {
+	m := tui.NewModelWithSessions(allSessions, pattern)
+	p := tea.NewProgram(m)
+	finalModel, err := p.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fm, ok := finalModel.(tui.Model)
+	if !ok {
+		return
+	}
+
+	target := fm.WarpTarget()
+	if target == nil {
+		return
+	}
+
+	warp(cfg, target)
 }
 
 // warp plays the animation and execs into ssh. Never returns on success.
