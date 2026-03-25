@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/clint/muxwarp/internal/config"
 )
 
 // Build-time variables set via ldflags.
@@ -18,6 +20,15 @@ func main() {
 		os.Exit(0)
 	}
 
-	fmt.Fprintln(os.Stderr, "not yet implemented")
-	os.Exit(1)
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n\nExample config (%s):\n\n%s",
+			err, config.DefaultPath(), config.ExampleConfig())
+		os.Exit(1)
+	}
+
+	fmt.Printf("Loaded %d hosts\n", len(cfg.Hosts))
+	for _, h := range cfg.Hosts {
+		fmt.Printf("  - %s\n", h)
+	}
 }
