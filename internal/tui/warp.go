@@ -14,20 +14,14 @@ import (
 // Each frame shows a growing block bar that fills available terminal width.
 func WarpFrames(hostShort, sessionName string, termWidth int) []string {
 	label := fmt.Sprintf("engaging jumpgate: %s/%s ", hostShort, sessionName)
-	maxBar := termWidth - len(label) - 1
-	if maxBar < 4 {
-		maxBar = 4
-	}
+	maxBar := max(termWidth-len(label)-1, 4)
 
 	barStyle := lipgloss.NewStyle().Foreground(colorCyan)
 
 	frames := make([]string, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		pct := float64(i+1) / 4.0
-		barLen := int(pct * float64(maxBar))
-		if barLen < 1 {
-			barLen = 1
-		}
+		barLen := max(int(pct*float64(maxBar)), 1)
 		bar := barStyle.Render(strings.Repeat("█", barLen))
 		frames[i] = label + bar
 	}

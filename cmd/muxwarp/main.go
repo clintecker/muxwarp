@@ -205,9 +205,5 @@ func parseTimeoutSec(timeout string) string {
 		}
 		return "3" // safe default
 	}
-	secs := int(d.Seconds())
-	if secs < 1 {
-		secs = 1
-	}
-	return strconv.Itoa(secs)
+	return strconv.Itoa(max(int(d.Seconds()), 1))
 }

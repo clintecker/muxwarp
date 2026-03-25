@@ -60,11 +60,9 @@ func (m *Model) restoreSelection() {
 
 // clampCursor ensures cursor stays within bounds.
 func (m *Model) clampCursor() {
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if len(m.filtered) > 0 && m.cursor >= len(m.filtered) {
-		m.cursor = len(m.filtered) - 1
+	m.cursor = max(m.cursor, 0)
+	if len(m.filtered) > 0 {
+		m.cursor = min(m.cursor, len(m.filtered)-1)
 	}
 }
 

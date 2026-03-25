@@ -114,8 +114,6 @@ func ScanAll(ctx context.Context, hosts []string, maxParallel int, timeoutSec st
 		}
 
 		wg.Add(1)
-		host := host // capture loop variable
-
 		go func() {
 			defer wg.Done()
 

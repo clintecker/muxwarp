@@ -36,10 +36,6 @@ var (
 	scanActiveStyle = lipgloss.NewStyle().
 			Foreground(colorCyan)
 
-	// Normal row in the session list.
-	rowStyle = lipgloss.NewStyle().
-			Foreground(colorText)
-
 	// Selected row gets a background tint.
 	selectedRowStyle = lipgloss.NewStyle().
 				Foreground(colorText).
@@ -61,12 +57,12 @@ var (
 
 	// FREE badge.
 	freeBadgeStyle = lipgloss.NewStyle().
-			Foreground(colorGreen).
+			Foreground(colorCyan).
 			Bold(true)
 
 	// DOCKED badge.
 	dockedBadgeStyle = lipgloss.NewStyle().
-				Foreground(colorRed).
+				Foreground(colorGreen).
 				Bold(true)
 
 	// Window count.

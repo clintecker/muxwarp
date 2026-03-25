@@ -41,35 +41,6 @@ type Model struct {
 	viewOffset  int                // first visible row in the scrolling list
 }
 
-// NewModelWithFakeData creates a Model pre-populated with fake sessions for
-// visual testing. The real scanner will be wired in later.
-func NewModelWithFakeData() Model {
-	sessions := []Session{
-		{Host: "web-prod-01.acme.io", HostShort: "web-prod-01", Name: "deploy", Attached: 0, Windows: 3},
-		{Host: "web-prod-01.acme.io", HostShort: "web-prod-01", Name: "monitoring", Attached: 1, Windows: 2},
-		{Host: "db-replica-03.acme.io", HostShort: "db-replica-03", Name: "psql", Attached: 0, Windows: 1},
-		{Host: "api-staging.acme.io", HostShort: "api-staging", Name: "dev", Attached: 0, Windows: 4},
-		{Host: "api-staging.acme.io", HostShort: "api-staging", Name: "tests", Attached: 2, Windows: 2},
-		{Host: "worker-01.acme.io", HostShort: "worker-01", Name: "sidekiq", Attached: 0, Windows: 1},
-		{Host: "worker-01.acme.io", HostShort: "worker-01", Name: "console", Attached: 1, Windows: 1},
-		{Host: "bastion.acme.io", HostShort: "bastion", Name: "tunnel", Attached: 0, Windows: 1},
-		{Host: "ml-gpu-02.acme.io", HostShort: "ml-gpu-02", Name: "training", Attached: 1, Windows: 5},
-		{Host: "ml-gpu-02.acme.io", HostShort: "ml-gpu-02", Name: "jupyter", Attached: 0, Windows: 2},
-	}
-
-	m := Model{
-		sessions:  sessions,
-		scanDone:  5,
-		scanTotal: 5,
-		width:     80,
-		height:    24,
-		matchInfo: make(map[string]matchInfo),
-	}
-	sortSessions(m.sessions)
-	m.filtered = m.sessions
-	return m
-}
-
 // SessionBatchMsg delivers a batch of sessions from one host.
 type SessionBatchMsg struct {
 	Host     string
@@ -151,9 +122,5 @@ func (m Model) visibleRows() int {
 	// header: 3 lines (box) + 1 blank line = 4
 	// footer: 1 blank line + 1 help line = 2
 	overhead := 6
-	rows := m.height - overhead
-	if rows < 1 {
-		return 1
-	}
-	return rows
+	return max(m.height-overhead, 1)
 }

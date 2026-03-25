@@ -163,7 +163,5 @@ func (m *Model) ensureViewport() {
 	if m.cursor >= m.viewOffset+visible {
 		m.viewOffset = m.cursor - visible + 1
 	}
-	if m.viewOffset < 0 {
-		m.viewOffset = 0
-	}
+	m.viewOffset = max(m.viewOffset, 0)
 }

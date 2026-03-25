@@ -38,14 +38,7 @@ func (m Model) View() tea.View {
 
 // renderHeader builds the header with the muxwarp box and status.
 func (m Model) renderHeader() string {
-	box := headerBoxStyle.Render(
-		"╭──── muxwarp ────╮\n" +
-			"│  warp to tmux   │\n" +
-			"╰─────────────────╯",
-	)
-
-	// We render a simpler box using the lipgloss border style.
-	box = headerBoxStyle.Render("muxwarp — warp to tmux")
+	box := headerBoxStyle.Render("muxwarp — warp to tmux")
 
 	var status string
 	if m.scanning {
@@ -53,22 +46,16 @@ func (m Model) renderHeader() string {
 			fmt.Sprintf("Spooling drives… %d/%d", m.scanDone, m.scanTotal),
 		)
 	} else {
-		count := len(m.sessions)
-		label := "sessions"
-		if count == 1 {
-			label = "session"
-		}
-		status = statusStyle.Render(fmt.Sprintf("%d %s across %d hosts",
-			count, label, m.countHosts()))
+		hosts := m.countHosts()
+		sessions := len(m.sessions)
+		status = statusStyle.Render(fmt.Sprintf("%d hosts · %d sessions",
+			hosts, sessions))
 	}
 
 	// Place box on left, status on right.
 	boxWidth := lipgloss.Width(box)
 	statusWidth := lipgloss.Width(status)
-	gap := m.width - boxWidth - statusWidth
-	if gap < 2 {
-		gap = 2
-	}
+	gap := max(m.width-boxWidth-statusWidth, 2)
 
 	return box + strings.Repeat(" ", gap) + status
 }
@@ -87,10 +74,7 @@ func (m Model) renderList() string {
 	visible := m.visibleRows()
 	var b strings.Builder
 
-	end := m.viewOffset + visible
-	if end > len(m.filtered) {
-		end = len(m.filtered)
-	}
+	end := min(m.viewOffset+visible, len(m.filtered))
 
 	for i := m.viewOffset; i < end; i++ {
 		if i > m.viewOffset {
@@ -109,36 +93,69 @@ func (m Model) renderList() string {
 	return b.String()
 }
 
-// renderRow renders a single session row.
+// maxHostWidth returns the width of the longest HostShort in the filtered list.
+func (m Model) maxHostWidth() int {
+	w := 0
+	for _, s := range m.filtered {
+		w = max(w, len(s.HostShort))
+	}
+	return w
+}
+
+// renderRow renders a single session row with adaptive column layout.
+//
+// Width >= 80: selector [host] session  ● DOCKED  wN
+// Width >= 60: selector [host] session  ●  wN      (badge text drops)
+// Width >= 45: selector [host] session  ●          (window count drops)
+// Width <  45: selector hos session  ●              (brackets drop, 3-char host)
 func (m Model) renderRow(idx int) string {
 	s := m.filtered[idx]
 	selected := idx == m.cursor
+	w := m.width
 
-	// Selector.
+	// Selector column.
 	sel := "  "
 	if selected {
 		sel = selectorStyle.Render("> ")
 	}
 
-	// Host label.
-	host := hostStyle.Render(fmt.Sprintf("[%s]", s.HostShort))
+	// Host column — adaptive, with fuzzy highlight support.
+	host := m.renderHostColumn(s, w)
 
 	// Session name — apply fuzzy highlights if available.
 	name := m.renderSessionName(s)
 
-	// Badge.
+	// Badge column — adaptive.
 	var badge string
-	if s.Attached == 0 {
-		badge = freeBadgeStyle.Render("FREE")
+	if w >= 80 {
+		// Full badge with text.
+		if s.Attached == 0 {
+			badge = freeBadgeStyle.Render("○ FREE")
+		} else {
+			badge = dockedBadgeStyle.Render("● DOCKED")
+		}
 	} else {
-		badge = dockedBadgeStyle.Render(fmt.Sprintf("DOCKED(%d)", s.Attached))
+		// Compact: dot only.
+		if s.Attached == 0 {
+			badge = freeBadgeStyle.Render("○")
+		} else {
+			badge = dockedBadgeStyle.Render("●")
+		}
 	}
 
-	// Window count.
-	wins := windowStyle.Render(fmt.Sprintf("w%d", s.Windows))
+	// Window count — hide below width 60.
+	wins := ""
+	if w >= 60 {
+		wins = windowStyle.Render(fmt.Sprintf("w%d", s.Windows))
+	}
 
 	// Compose the row.
-	row := fmt.Sprintf("%s %s %s  %s  %s", sel, host, name, badge, wins)
+	var row string
+	if wins != "" {
+		row = fmt.Sprintf("%s %s %s  %s  %s", sel, host, name, badge, wins)
+	} else {
+		row = fmt.Sprintf("%s %s %s  %s", sel, host, name, badge)
+	}
 
 	// Apply row background for selected row.
 	if selected {
@@ -151,6 +168,57 @@ func (m Model) renderRow(idx int) string {
 	}
 
 	return row
+}
+
+// renderHostColumn renders the host label with adaptive width and fuzzy highlights.
+func (m Model) renderHostColumn(s Session, termWidth int) string {
+	hostW := m.maxHostWidth()
+	hostText := s.HostShort
+
+	// Build a set of matched positions in the host portion.
+	mi, _ := m.matchInfo[s.Key()]
+	hostMatchSet := make(map[int]bool)
+	for _, idx := range mi.indexes {
+		if idx >= 0 && idx < len(s.HostShort) {
+			hostMatchSet[idx] = true
+		}
+	}
+
+	if termWidth < 45 {
+		// 3-char prefix, no brackets.
+		if len(hostText) > 3 {
+			hostText = hostText[:3]
+		}
+		return renderHighlightedString(hostText, hostMatchSet, hostStyle, matchHighlightStyle)
+	}
+
+	// Bracketed, padded to widest host.
+	// Build: "[" + highlighted host + padding + "]"
+	var b strings.Builder
+	b.WriteString(hostStyle.Render("["))
+	b.WriteString(renderHighlightedString(hostText, hostMatchSet, hostStyle, matchHighlightStyle))
+	// Pad to hostW width.
+	if pad := hostW - len(hostText); pad > 0 {
+		b.WriteString(strings.Repeat(" ", pad))
+	}
+	b.WriteString(hostStyle.Render("]"))
+	return b.String()
+}
+
+// renderHighlightedString renders a string with certain character positions highlighted.
+func renderHighlightedString(s string, matchSet map[int]bool, normalStyle, highlightStyle lipgloss.Style) string {
+	if len(matchSet) == 0 {
+		return normalStyle.Render(s)
+	}
+	var b strings.Builder
+	for i, ch := range s {
+		if matchSet[i] {
+			b.WriteString(highlightStyle.Render(string(ch)))
+		} else {
+			b.WriteString(normalStyle.Render(string(ch)))
+		}
+	}
+	return b.String()
 }
 
 // renderSessionName renders the session name with fuzzy match highlighting.
@@ -172,15 +240,7 @@ func (m Model) renderSessionName(s Session) string {
 		}
 	}
 
-	var b strings.Builder
-	for i, ch := range s.Name {
-		if nameMatchSet[i] {
-			b.WriteString(matchHighlightStyle.Render(string(ch)))
-		} else {
-			b.WriteString(sessionNameStyle.Render(string(ch)))
-		}
-	}
-	return b.String()
+	return renderHighlightedString(s.Name, nameMatchSet, sessionNameStyle, matchHighlightStyle)
 }
 
 // renderFooter builds the context-sensitive footer.
@@ -203,10 +263,7 @@ func (m Model) renderFooter() string {
 		// Right-align the match count.
 		filterWidth := lipgloss.Width(filterLine)
 		matchWidth := lipgloss.Width(matchCount)
-		gap := m.width - filterWidth - matchWidth
-		if gap < 2 {
-			gap = 2
-		}
+		gap := max(m.width-filterWidth-matchWidth, 2)
 
 		return filterLine + strings.Repeat(" ", gap) + matchCount + "\n" + help
 	}
