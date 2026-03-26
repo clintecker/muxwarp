@@ -256,16 +256,18 @@ func TestColumnAlignment_HostsAligned(t *testing.T) {
 func runeIndex(haystack, needle []rune) int {
 	pos := -1
 	for i := 0; i <= len(haystack)-len(needle); i++ {
-		match := true
-		for j := range needle {
-			if haystack[i+j] != needle[j] {
-				match = false
-				break
-			}
-		}
-		if match {
+		if runesMatch(haystack[i:i+len(needle)], needle) {
 			pos = i
 		}
 	}
 	return pos
+}
+
+func runesMatch(a, b []rune) bool {
+	for i := range b {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

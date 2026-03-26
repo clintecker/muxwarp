@@ -112,12 +112,11 @@ type columnWidths struct {
 // across all filtered sessions for column alignment.
 func (m Model) computeColumnWidths() columnWidths {
 	var cols columnWidths
+	showDots := m.width >= 60
 	for _, s := range m.filtered {
-		if len(s.Name) > cols.maxName {
-			cols.maxName = len(s.Name)
-		}
-		if m.width >= 60 && s.Windows > cols.maxDots {
-			cols.maxDots = s.Windows
+		cols.maxName = max(cols.maxName, len(s.Name))
+		if showDots {
+			cols.maxDots = max(cols.maxDots, s.Windows)
 		}
 	}
 	return cols
