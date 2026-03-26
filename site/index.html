@@ -8,169 +8,369 @@
   <meta property="og:title" content="muxwarp">
   <meta property="og:description" content="Warp into tmux sessions on remote machines.">
   <meta property="og:type" content="website">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▲</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9650;</text></svg>">
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
     :root {
-      --bg: #0e0e14;
-      --bg-card: #16161e;
-      --bg-code: #1e1e2e;
-      --cyan: #8be9fd;
-      --lavender: #bd93f9;
-      --green: #2ee6a6;
-      --red: #ff5555;
-      --slate: #6b7280;
-      --text: #e6e6e6;
-      --text-dim: #9ca3af;
-      --neon-blue: #00d9ff;
-      --electric-purple: #c891ff;
+      --green-50: #ECFDF5;
+      --green-100: #D1FAE5;
+      --green-200: #A7F3D0;
+      --green-300: #6EE7B7;
+      --green-400: #34D399;
+      --green-500: #10B981;
+      --green-600: #059669;
+      --green-700: #047857;
+      --green-800: #065F46;
+      --green-900: #064E3B;
+      --green-950: #022C22;
+      --neon: #00E676;
+      --lime: #B9F6CA;
+      --mint: #F0FFF4;
+      --white: #FFFFFF;
+      --off-white: #F8FDF9;
+      --text: #064E3B;
+      --text-light: #047857;
+      --text-muted: #6B8F80;
+      --shadow-green: rgba(16, 185, 129, 0.15);
+      --shadow-neon: rgba(0, 230, 118, 0.3);
+      --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-      background: var(--bg);
+      font-family: 'Space Grotesk', -apple-system, system-ui, sans-serif;
+      background: var(--white);
       color: var(--text);
       line-height: 1.6;
       overflow-x: hidden;
     }
 
-    .container {
-      max-width: 860px;
-      margin: 0 auto;
-      padding: 0 24px;
+    /* ================================================================
+       ANIMATED GRID BACKGROUND
+       ================================================================ */
+    .grid-bg {
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      background-image:
+        linear-gradient(var(--green-200) 1px, transparent 1px),
+        linear-gradient(90deg, var(--green-200) 1px, transparent 1px);
+      background-size: 60px 60px;
+      opacity: 0.4;
+      animation: gridDrift 20s linear infinite;
     }
 
-    /* Header */
-    header {
-      padding: 20px 0;
-      border-bottom: 1px solid #1e1e2e;
+    @keyframes gridDrift {
+      0% { transform: translate(0, 0); }
+      100% { transform: translate(60px, 60px); }
     }
 
-    .header-inner {
+    /* Radial fade so grid is strongest at center */
+    .grid-fade {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background: radial-gradient(ellipse at 50% 30%, transparent 0%, var(--white) 70%);
+    }
+
+    /* ================================================================
+       FLOATING DOTS PATTERN
+       ================================================================ */
+    .dots-pattern {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .dot {
+      position: absolute;
+      border-radius: 50%;
+      background: var(--green-400);
+      opacity: 0;
+      animation: dotPulse 4s ease-in-out infinite;
+    }
+
+    .dot:nth-child(1)  { width: 6px;  height: 6px;  top: 12%; left: 8%;  animation-delay: 0s; }
+    .dot:nth-child(2)  { width: 4px;  height: 4px;  top: 25%; left: 85%; animation-delay: 0.7s; }
+    .dot:nth-child(3)  { width: 8px;  height: 8px;  top: 45%; left: 5%;  animation-delay: 1.4s; }
+    .dot:nth-child(4)  { width: 5px;  height: 5px;  top: 60%; left: 92%; animation-delay: 2.1s; }
+    .dot:nth-child(5)  { width: 7px;  height: 7px;  top: 78%; left: 15%; animation-delay: 2.8s; }
+    .dot:nth-child(6)  { width: 4px;  height: 4px;  top: 18%; left: 70%; animation-delay: 0.4s; }
+    .dot:nth-child(7)  { width: 6px;  height: 6px;  top: 35%; left: 25%; animation-delay: 1.8s; }
+    .dot:nth-child(8)  { width: 5px;  height: 5px;  top: 55%; left: 78%; animation-delay: 3.2s; }
+    .dot:nth-child(9)  { width: 3px;  height: 3px;  top: 88%; left: 55%; animation-delay: 1.1s; }
+    .dot:nth-child(10) { width: 7px;  height: 7px;  top: 8%;  left: 45%; animation-delay: 2.5s; }
+    .dot:nth-child(11) { width: 4px;  height: 4px;  top: 40%; left: 60%; animation-delay: 3.6s; }
+    .dot:nth-child(12) { width: 6px;  height: 6px;  top: 70%; left: 40%; animation-delay: 0.9s; }
+
+    @keyframes dotPulse {
+      0%, 100% { opacity: 0; transform: scale(0.5); }
+      50% { opacity: 0.5; transform: scale(1.5); }
+    }
+
+    /* ================================================================
+       NAV
+       ================================================================ */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 16px 32px;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--green-200);
     }
 
-    .logo {
+    .nav-logo {
       display: flex;
       align-items: center;
       gap: 10px;
       text-decoration: none;
-      color: var(--text);
-    }
-
-    .logo-triangle {
-      color: var(--lavender);
-      font-size: 1.2rem;
-      font-weight: bold;
-    }
-
-    .logo-text {
-      font-size: 1.1rem;
       font-weight: 700;
-      color: var(--cyan);
-      letter-spacing: 0.5px;
+      font-size: 1.1rem;
+      color: var(--green-800);
     }
 
-    .header-links {
-      display: flex;
-      gap: 24px;
-    }
-
-    .header-links a {
-      color: var(--text-dim);
-      text-decoration: none;
+    .nav-logo .tri {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: var(--green-500);
+      color: white;
+      border-radius: 6px;
       font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 28px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      font-weight: 500;
       transition: color 0.2s;
     }
 
-    .header-links a:hover { color: var(--cyan); }
+    .nav-links a:hover { color: var(--green-600); }
 
-    /* Hero */
+    /* ================================================================
+       HERO — full viewport, massive
+       ================================================================ */
     .hero {
-      padding: 100px 0 80px;
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 120px 24px 80px;
       text-align: center;
     }
 
+    /* Warp lines radiating from center */
+    .warp-lines {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .warp-line {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 2px;
+      height: 0;
+      background: linear-gradient(to bottom, transparent, var(--green-400), transparent);
+      transform-origin: top center;
+      animation: warpShoot 3s ease-out infinite;
+      opacity: 0;
+    }
+
+    .warp-line:nth-child(1)  { transform: rotate(0deg);   animation-delay: 0s; }
+    .warp-line:nth-child(2)  { transform: rotate(30deg);  animation-delay: 0.25s; }
+    .warp-line:nth-child(3)  { transform: rotate(60deg);  animation-delay: 0.5s; }
+    .warp-line:nth-child(4)  { transform: rotate(90deg);  animation-delay: 0.75s; }
+    .warp-line:nth-child(5)  { transform: rotate(120deg); animation-delay: 1s; }
+    .warp-line:nth-child(6)  { transform: rotate(150deg); animation-delay: 1.25s; }
+    .warp-line:nth-child(7)  { transform: rotate(180deg); animation-delay: 1.5s; }
+    .warp-line:nth-child(8)  { transform: rotate(210deg); animation-delay: 1.75s; }
+    .warp-line:nth-child(9)  { transform: rotate(240deg); animation-delay: 2s; }
+    .warp-line:nth-child(10) { transform: rotate(270deg); animation-delay: 2.25s; }
+    .warp-line:nth-child(11) { transform: rotate(300deg); animation-delay: 2.5s; }
+    .warp-line:nth-child(12) { transform: rotate(330deg); animation-delay: 2.75s; }
+
+    @keyframes warpShoot {
+      0%   { height: 0;    opacity: 0; }
+      20%  { height: 80px; opacity: 0.6; }
+      100% { height: 400px; opacity: 0; }
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: var(--green-100);
+      border: 1px solid var(--green-300);
+      border-radius: 99px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--green-700);
+      margin-bottom: 32px;
+      animation: fadeUp 0.6s ease-out both;
+    }
+
+    .hero-badge .pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green-500);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.5); }
+    }
+
     .hero h1 {
-      font-size: 3.2rem;
-      font-weight: 800;
-      letter-spacing: -1px;
-      margin-bottom: 16px;
-      background: linear-gradient(135deg, var(--neon-blue), var(--electric-purple));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      font-size: clamp(3.5rem, 10vw, 7rem);
+      font-weight: 700;
+      letter-spacing: -3px;
+      line-height: 0.95;
+      color: var(--green-950);
+      margin-bottom: 24px;
+      animation: fadeUp 0.6s ease-out 0.1s both;
     }
 
-    .hero .subtitle {
-      font-size: 1.3rem;
-      color: var(--text-dim);
-      max-width: 540px;
-      margin: 0 auto 40px;
+    .hero h1 .accent {
+      color: var(--green-500);
     }
 
-    .hero-actions {
+    .hero .tagline {
+      font-size: clamp(1.1rem, 2.5vw, 1.4rem);
+      color: var(--text-muted);
+      max-width: 520px;
+      margin: 0 auto 48px;
+      font-weight: 400;
+      animation: fadeUp 0.6s ease-out 0.2s both;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .hero-buttons {
       display: flex;
       gap: 16px;
       justify-content: center;
       flex-wrap: wrap;
+      margin-bottom: 64px;
+      animation: fadeUp 0.6s ease-out 0.3s both;
     }
 
     .btn {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 12px 28px;
-      border-radius: 8px;
-      font-size: 0.95rem;
+      padding: 14px 32px;
+      border-radius: 12px;
+      font-size: 1rem;
       font-weight: 600;
+      font-family: inherit;
       text-decoration: none;
-      transition: all 0.2s;
+      transition: all 0.25s;
+      cursor: pointer;
+      border: none;
     }
 
-    .btn-primary {
-      background: linear-gradient(135deg, var(--neon-blue), var(--electric-purple));
-      color: #0e0e14;
+    .btn-green {
+      background: var(--green-600);
+      color: white;
+      box-shadow: 0 4px 16px var(--shadow-green), 0 0 0 0 var(--shadow-neon);
     }
 
-    .btn-primary:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 20px rgba(0, 217, 255, 0.25);
+    .btn-green:hover {
+      background: var(--green-700);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px var(--shadow-green), 0 0 40px var(--shadow-neon);
     }
 
-    .btn-secondary {
-      background: var(--bg-card);
-      color: var(--text);
-      border: 1px solid #2a2a3a;
+    .btn-outline {
+      background: white;
+      color: var(--green-700);
+      border: 2px solid var(--green-300);
     }
 
-    .btn-secondary:hover {
-      border-color: var(--lavender);
-      background: #1a1a24;
+    .btn-outline:hover {
+      border-color: var(--green-500);
+      background: var(--green-50);
+      transform: translateY(-2px);
     }
 
-    /* Terminal demo */
-    .terminal-wrap {
-      margin: 60px auto 0;
-      max-width: 700px;
+    /* ================================================================
+       TERMINAL MOCK — floating, tilted, glowing
+       ================================================================ */
+    .terminal-float {
+      position: relative;
+      width: 100%;
+      max-width: 680px;
+      animation: fadeUp 0.8s ease-out 0.4s both;
+    }
+
+    /* Glow behind terminal */
+    .terminal-float::before {
+      content: '';
+      position: absolute;
+      inset: -20px;
+      background: radial-gradient(ellipse, var(--shadow-neon) 0%, transparent 70%);
+      border-radius: 24px;
+      z-index: -1;
+      animation: glowPulse 4s ease-in-out infinite;
+    }
+
+    @keyframes glowPulse {
+      0%, 100% { opacity: 0.5; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.02); }
     }
 
     .terminal {
-      background: var(--bg-code);
-      border-radius: 10px;
+      background: var(--green-950);
+      border-radius: 16px;
       overflow: hidden;
-      border: 1px solid #2a2a3a;
-      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
-      font-size: 0.85rem;
-      line-height: 1.7;
+      box-shadow:
+        0 20px 60px rgba(6, 78, 59, 0.3),
+        0 0 0 1px rgba(16, 185, 129, 0.2);
+      transform: perspective(1000px) rotateX(2deg);
+      transition: transform 0.4s ease;
+    }
+
+    .terminal:hover {
+      transform: perspective(1000px) rotateX(0deg) scale(1.01);
     }
 
     .terminal-bar {
-      background: #1a1a24;
-      padding: 10px 16px;
+      background: var(--green-900);
+      padding: 12px 16px;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -180,380 +380,656 @@
       width: 12px;
       height: 12px;
       border-radius: 50%;
+      opacity: 0.7;
     }
 
-    .terminal-dot.red { background: var(--red); }
-    .terminal-dot.yellow { background: #f1fa8c; }
-    .terminal-dot.green { background: var(--green); }
+    .terminal-dot:nth-child(1) { background: #EF4444; }
+    .terminal-dot:nth-child(2) { background: #F59E0B; }
+    .terminal-dot:nth-child(3) { background: var(--neon); }
 
     .terminal-body {
-      padding: 20px 24px;
+      padding: 24px 28px;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      line-height: 1.8;
       white-space: pre;
       overflow-x: auto;
+      color: var(--green-300);
+      position: relative;
     }
 
-    .t-lavender { color: var(--lavender); }
-    .t-cyan { color: var(--cyan); }
-    .t-green { color: var(--green); }
-    .t-slate { color: var(--slate); }
-    .t-text { color: var(--text); }
-    .t-bold { font-weight: 700; }
-    .t-dim { color: #4a4a5e; }
-    .t-gradient {
-      background: linear-gradient(90deg, var(--neon-blue), var(--electric-purple));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+    /* Subtle scanlines */
+    .terminal-body::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 230, 118, 0.03) 2px,
+        rgba(0, 230, 118, 0.03) 4px
+      );
+      pointer-events: none;
     }
 
-    /* Install snippet */
+    .t-bright { color: #ECFDF5; font-weight: 600; }
+    .t-green  { color: var(--neon); }
+    .t-cyan   { color: #67E8F9; }
+    .t-dim    { color: var(--green-600); }
+    .t-white  { color: #F0FFF4; }
+    .t-bold   { font-weight: 600; }
+
+    /* ================================================================
+       INSTALL BOX
+       ================================================================ */
+    .install-section {
+      padding: 0 24px 120px;
+      text-align: center;
+    }
+
     .install-box {
-      margin: 48px auto 0;
-      max-width: 480px;
-    }
-
-    .install-cmd {
-      background: var(--bg-code);
-      border: 1px solid #2a2a3a;
-      border-radius: 8px;
-      padding: 14px 20px;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 0.9rem;
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+      gap: 16px;
+      padding: 16px 24px;
+      background: var(--green-50);
+      border: 2px solid var(--green-200);
+      border-radius: 14px;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--green-800);
+      animation: fadeUp 0.6s ease-out 0.5s both;
     }
 
-    .install-cmd code {
-      color: var(--text);
-    }
-
-    .install-cmd .prompt { color: var(--cyan); }
+    .install-box .prompt { color: var(--green-500); font-weight: 600; }
 
     .copy-btn {
-      background: none;
-      border: 1px solid #2a2a3a;
-      color: var(--text-dim);
-      padding: 4px 10px;
-      border-radius: 4px;
+      background: var(--green-500);
+      color: white;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 8px;
       cursor: pointer;
+      font-family: inherit;
       font-size: 0.8rem;
+      font-weight: 600;
       transition: all 0.2s;
     }
 
-    .copy-btn:hover {
-      border-color: var(--cyan);
-      color: var(--cyan);
+    .copy-btn:hover { background: var(--green-600); }
+
+    .copy-btn.copied {
+      background: var(--green-700);
     }
 
-    /* Features */
-    .features {
-      padding: 100px 0;
+    /* ================================================================
+       SECTION SHARED
+       ================================================================ */
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px;
     }
 
-    .features h2 {
+    section { position: relative; }
+
+    .section-header {
       text-align: center;
-      font-size: 2rem;
+      margin-bottom: 64px;
+    }
+
+    .section-header .label {
+      display: inline-block;
+      font-size: 0.75rem;
       font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--green-500);
       margin-bottom: 12px;
     }
 
-    .features .section-sub {
-      text-align: center;
-      color: var(--text-dim);
-      margin-bottom: 56px;
-      font-size: 1.05rem;
+    .section-header h2 {
+      font-size: 2.6rem;
+      font-weight: 700;
+      letter-spacing: -1px;
+      color: var(--green-950);
+    }
+
+    .section-header p {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      max-width: 480px;
+      margin: 12px auto 0;
+    }
+
+    /* ================================================================
+       FEATURES — staggered cards with green tints
+       ================================================================ */
+    .features {
+      padding: 120px 24px;
+      background: var(--green-50);
+      border-top: 1px solid var(--green-200);
+      border-bottom: 1px solid var(--green-200);
+    }
+
+    /* Topographic contour pattern */
+    .features::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0.06;
+      background-image:
+        radial-gradient(ellipse 600px 200px at 20% 50%, var(--green-500) 0%, transparent 100%),
+        radial-gradient(ellipse 400px 300px at 80% 30%, var(--green-400) 0%, transparent 100%),
+        radial-gradient(ellipse 500px 250px at 60% 80%, var(--green-600) 0%, transparent 100%);
+      pointer-events: none;
     }
 
     .feature-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 24px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
     }
 
     .feature-card {
-      background: var(--bg-card);
-      border: 1px solid #1e1e2e;
-      border-radius: 10px;
-      padding: 28px;
-      transition: border-color 0.2s;
+      position: relative;
+      background: white;
+      border: 1px solid var(--green-200);
+      border-radius: 16px;
+      padding: 32px 28px;
+      transition: all 0.3s;
+      overflow: hidden;
+    }
+
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--green-400), var(--green-600));
+      opacity: 0;
+      transition: opacity 0.3s;
     }
 
     .feature-card:hover {
-      border-color: #2a2a3a;
+      border-color: var(--green-400);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 32px var(--shadow-green);
     }
 
+    .feature-card:hover::before { opacity: 1; }
+
     .feature-icon {
-      font-size: 1.8rem;
-      margin-bottom: 12px;
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: var(--green-100);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      font-size: 1.3rem;
     }
 
     .feature-card h3 {
-      font-size: 1rem;
+      font-size: 1.05rem;
       font-weight: 600;
       margin-bottom: 8px;
-      color: var(--text);
+      color: var(--green-900);
     }
 
     .feature-card p {
       font-size: 0.9rem;
-      color: var(--text-dim);
-      line-height: 1.5;
+      color: var(--text-muted);
+      line-height: 1.55;
     }
 
-    /* How it works */
+    .feature-card code {
+      font-family: var(--mono);
+      font-size: 0.85em;
+      background: var(--green-100);
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: var(--green-700);
+    }
+
+    /* ================================================================
+       HOW IT WORKS — horizontal timeline
+       ================================================================ */
     .how-it-works {
-      padding: 0 0 100px;
+      padding: 120px 24px;
     }
 
-    .how-it-works h2 {
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      position: relative;
+    }
+
+    /* Connecting line */
+    .timeline::before {
+      content: '';
+      position: absolute;
+      top: 28px;
+      left: 28px;
+      right: 28px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--green-300), var(--green-500), var(--green-300));
+      border-radius: 2px;
+    }
+
+    .timeline-step {
       text-align: center;
-      font-size: 2rem;
-      font-weight: 700;
-      margin-bottom: 48px;
-    }
-
-    .steps {
-      display: flex;
-      flex-direction: column;
-      gap: 32px;
-      max-width: 600px;
-      margin: 0 auto;
-    }
-
-    .step {
-      display: flex;
-      gap: 20px;
-      align-items: flex-start;
+      position: relative;
+      padding: 0 12px;
     }
 
     .step-num {
-      flex-shrink: 0;
-      width: 36px;
-      height: 36px;
+      width: 56px;
+      height: 56px;
       border-radius: 50%;
-      background: linear-gradient(135deg, var(--neon-blue), var(--electric-purple));
+      background: white;
+      border: 3px solid var(--green-400);
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 700;
-      font-size: 0.85rem;
-      color: #0e0e14;
+      font-size: 1.1rem;
+      color: var(--green-600);
+      margin: 0 auto 20px;
+      position: relative;
+      z-index: 1;
+      transition: all 0.3s;
     }
 
-    .step-content h3 {
+    .timeline-step:hover .step-num {
+      background: var(--green-500);
+      color: white;
+      border-color: var(--green-500);
+      box-shadow: 0 0 24px var(--shadow-neon);
+    }
+
+    .timeline-step h3 {
       font-size: 1rem;
       font-weight: 600;
-      margin-bottom: 4px;
+      color: var(--green-900);
+      margin-bottom: 6px;
     }
 
-    .step-content p {
-      color: var(--text-dim);
-      font-size: 0.9rem;
-    }
-
-    .step-content code {
-      background: var(--bg-code);
-      padding: 2px 6px;
-      border-radius: 3px;
+    .timeline-step p {
       font-size: 0.85rem;
-      color: var(--cyan);
+      color: var(--text-muted);
+      line-height: 1.5;
     }
 
-    /* Config section */
+    .timeline-step code {
+      font-family: var(--mono);
+      font-size: 0.8em;
+      background: var(--green-100);
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: var(--green-700);
+    }
+
+    /* ================================================================
+       CONFIG — split layout
+       ================================================================ */
     .config-section {
-      padding: 0 0 100px;
+      padding: 120px 24px;
+      background: var(--green-50);
+      border-top: 1px solid var(--green-200);
+      border-bottom: 1px solid var(--green-200);
     }
 
-    .config-section h2 {
-      text-align: center;
-      font-size: 2rem;
-      font-weight: 700;
-      margin-bottom: 12px;
-    }
-
-    .config-section .section-sub {
-      text-align: center;
-      color: var(--text-dim);
-      margin-bottom: 40px;
-      font-size: 1.05rem;
-    }
-
-    .config-example {
-      max-width: 500px;
-      margin: 0 auto;
-    }
-
-    .config-example pre {
-      background: var(--bg-code);
-      border: 1px solid #2a2a3a;
-      border-radius: 8px;
-      padding: 20px 24px;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 0.85rem;
-      line-height: 1.7;
-      overflow-x: auto;
-    }
-
-    .config-example .comment { color: var(--slate); }
-    .config-example .key { color: var(--cyan); }
-    .config-example .value { color: var(--green); }
-
-    /* Keybindings */
-    .keybindings {
-      padding: 0 0 100px;
-    }
-
-    .keybindings h2 {
-      text-align: center;
-      font-size: 2rem;
-      font-weight: 700;
-      margin-bottom: 40px;
-    }
-
-    .keys-grid {
+    .config-layout {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 12px;
-      max-width: 600px;
-      margin: 0 auto;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: center;
     }
 
-    .key-item {
+    .config-text h2 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      letter-spacing: -1px;
+      color: var(--green-950);
+      margin-bottom: 16px;
+    }
+
+    .config-text p {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      line-height: 1.6;
+    }
+
+    .config-text .config-facts {
+      list-style: none;
+      margin-top: 20px;
+    }
+
+    .config-facts li {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 10px 16px;
-      background: var(--bg-card);
-      border-radius: 8px;
-      border: 1px solid #1e1e2e;
+      gap: 10px;
+      font-size: 0.95rem;
+      color: var(--text-light);
+      padding: 6px 0;
     }
 
-    .key-item kbd {
-      background: var(--bg-code);
-      border: 1px solid #2a2a3a;
-      border-radius: 4px;
-      padding: 2px 8px;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 0.8rem;
-      color: var(--cyan);
-      min-width: 40px;
-      text-align: center;
+    .config-facts .check {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--green-100);
+      color: var(--green-600);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      flex-shrink: 0;
     }
 
-    .key-item span {
-      color: var(--text-dim);
+    .config-code {
+      position: relative;
+    }
+
+    .config-code pre {
+      background: var(--green-950);
+      border-radius: 14px;
+      padding: 28px 32px;
+      font-family: var(--mono);
       font-size: 0.85rem;
+      line-height: 1.8;
+      color: var(--green-300);
+      overflow-x: auto;
+      box-shadow: 0 12px 40px rgba(6, 78, 59, 0.2);
     }
 
-    /* Footer */
-    footer {
-      border-top: 1px solid #1e1e2e;
-      padding: 40px 0;
+    .config-code .comment { color: var(--green-600); }
+    .config-code .key { color: #67E8F9; }
+    .config-code .value { color: var(--neon); }
+
+    /* ================================================================
+       KEYBINDINGS — pill-shaped keys
+       ================================================================ */
+    .keybindings {
+      padding: 120px 24px;
+    }
+
+    .keys-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      max-width: 660px;
+      margin: 0 auto;
+    }
+
+    .key-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      background: white;
+      border: 1.5px solid var(--green-200);
+      border-radius: 99px;
+      transition: all 0.2s;
+    }
+
+    .key-pill:hover {
+      border-color: var(--green-400);
+      box-shadow: 0 4px 12px var(--shadow-green);
+      transform: translateY(-2px);
+    }
+
+    .key-pill kbd {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: var(--green-100);
+      color: var(--green-700);
+      padding: 3px 10px;
+      border-radius: 6px;
+    }
+
+    .key-pill span {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* ================================================================
+       CTA
+       ================================================================ */
+    .cta {
+      padding: 120px 24px;
       text-align: center;
+      background: linear-gradient(180deg, var(--white) 0%, var(--green-100) 100%);
+      position: relative;
+    }
+
+    /* Animated concentric rings */
+    .cta-rings {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .ring {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      border-radius: 50%;
+      border: 1.5px solid var(--green-300);
+      transform: translate(-50%, -50%);
+      animation: ringExpand 6s ease-out infinite;
+      opacity: 0;
+    }
+
+    .ring:nth-child(1) { animation-delay: 0s; }
+    .ring:nth-child(2) { animation-delay: 1.5s; }
+    .ring:nth-child(3) { animation-delay: 3s; }
+    .ring:nth-child(4) { animation-delay: 4.5s; }
+
+    @keyframes ringExpand {
+      0%   { width: 40px;  height: 40px;  opacity: 0.6; }
+      100% { width: 800px; height: 800px; opacity: 0; }
+    }
+
+    .cta h2 {
+      position: relative;
+      font-size: 2.4rem;
+      font-weight: 700;
+      letter-spacing: -1px;
+      color: var(--green-950);
+      margin-bottom: 16px;
+    }
+
+    .cta p {
+      position: relative;
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      margin-bottom: 36px;
+    }
+
+    .cta .btn { position: relative; }
+
+    /* ================================================================
+       FOOTER
+       ================================================================ */
+    footer {
+      padding: 40px 24px;
+      text-align: center;
+      border-top: 1px solid var(--green-200);
+      background: var(--green-50);
     }
 
     footer p {
-      color: var(--slate);
       font-size: 0.85rem;
+      color: var(--text-muted);
     }
 
     footer a {
-      color: var(--lavender);
+      color: var(--green-600);
       text-decoration: none;
+      font-weight: 500;
     }
 
     footer a:hover { text-decoration: underline; }
 
-    /* Responsive */
-    @media (max-width: 640px) {
-      .hero h1 { font-size: 2.2rem; }
-      .hero .subtitle { font-size: 1.1rem; }
-      .terminal-body { font-size: 0.72rem; padding: 14px 16px; }
-      .header-links { gap: 16px; }
+    /* ================================================================
+       RESPONSIVE
+       ================================================================ */
+    @media (max-width: 768px) {
+      .feature-grid { grid-template-columns: 1fr; }
+
+      .timeline {
+        grid-template-columns: 1fr;
+        gap: 32px;
+      }
+
+      .timeline::before { display: none; }
+
+      .config-layout {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+
+      .terminal-body { font-size: 0.7rem; padding: 16px 18px; }
+
+      nav { padding: 12px 16px; }
+      .nav-links { gap: 16px; }
+
+      .install-box {
+        flex-direction: column;
+        font-size: 0.75rem;
+      }
     }
   </style>
 </head>
 <body>
-  <header>
-    <div class="container header-inner">
-      <a class="logo" href="#">
-        <span class="logo-triangle">▲</span>
-        <span class="logo-text">muxwarp</span>
-      </a>
-      <nav class="header-links">
-        <a href="https://github.com/clintecker/muxwarp">GitHub</a>
-        <a href="https://github.com/clintecker/muxwarp/blob/main/docs/architecture.md">Docs</a>
-        <a href="https://github.com/clintecker/muxwarp/blob/main/docs/CONTRIBUTING.md">Contributing</a>
-      </nav>
-    </div>
-  </header>
+
+  <div class="grid-bg"></div>
+  <div class="grid-fade"></div>
+
+  <nav>
+    <a class="nav-logo" href="#">
+      <span class="tri">&#9650;</span>
+      muxwarp
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how-it-works">How it works</a></li>
+      <li><a href="https://github.com/clintecker/muxwarp/blob/main/docs/architecture.md">Docs</a></li>
+      <li><a href="https://github.com/clintecker/muxwarp">GitHub</a></li>
+    </ul>
+  </nav>
 
   <main>
+    <!-- ======================== HERO ======================== -->
     <section class="hero">
-      <div class="container">
-        <h1>muxwarp</h1>
-        <p class="subtitle">
-          Scan your SSH hosts. Find every tmux session. Warp in with one keystroke.
-        </p>
-        <div class="hero-actions">
-          <a class="btn btn-primary" href="https://github.com/clintecker/muxwarp">View on GitHub</a>
-          <a class="btn btn-secondary" href="https://github.com/clintecker/muxwarp/releases">Download</a>
-        </div>
+      <div class="dots-pattern">
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      </div>
 
-        <div class="terminal-wrap">
-          <div class="terminal">
-            <div class="terminal-bar">
-              <div class="terminal-dot red"></div>
-              <div class="terminal-dot yellow"></div>
-              <div class="terminal-dot green"></div>
-            </div>
-            <div class="terminal-body"><span class="t-lavender t-bold">▲</span> <span class="t-cyan t-bold">muxwarp</span> <span class="t-gradient">────────────────────────</span> <span class="t-slate">2 hosts · 5 sessions</span>
+      <div class="warp-lines">
+        <div class="warp-line"></div><div class="warp-line"></div>
+        <div class="warp-line"></div><div class="warp-line"></div>
+        <div class="warp-line"></div><div class="warp-line"></div>
+        <div class="warp-line"></div><div class="warp-line"></div>
+        <div class="warp-line"></div><div class="warp-line"></div>
+        <div class="warp-line"></div><div class="warp-line"></div>
+      </div>
 
-<span class="t-cyan t-bold">▸</span>  <span class="t-text t-bold">chatalpha</span>     <span class="t-cyan t-bold">◇ IDLE</span>  <span class="t-slate">▪</span>      <span class="t-lavender">indigo</span>
-   <span class="t-text">scenarios</span>     <span class="t-cyan">◇ IDLE</span>  <span class="t-slate">▪</span>      <span class="t-lavender">indigo</span>
-   <span class="t-text">cjdos</span>         <span class="t-green">◆ LIVE</span>  <span class="t-slate">▪▪</span>     <span class="t-lavender">indigo</span>
-   <span class="t-text">build-farm</span>    <span class="t-cyan">◇ IDLE</span>  <span class="t-slate">▪▪▪</span>    <span class="t-lavender">devbox</span>
-   <span class="t-text">monitoring</span>    <span class="t-green">◆ LIVE</span>  <span class="t-slate">▪</span>      <span class="t-lavender">devbox</span>
+      <div class="hero-badge">
+        <span class="pulse"></span>
+        Open source &middot; MIT License
+      </div>
 
-<span class="t-slate">↑/↓ navigate │ enter warp │ / filter │ r rescan │ q quit</span></div>
+      <h1>mux<span class="accent">warp</span></h1>
+
+      <p class="tagline">
+        Scan your SSH hosts. Find every tmux session.<br>
+        Warp in with one keystroke.
+      </p>
+
+      <div class="hero-buttons">
+        <a class="btn btn-green" href="https://github.com/clintecker/muxwarp">
+          <svg width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          View on GitHub
+        </a>
+        <a class="btn btn-outline" href="https://github.com/clintecker/muxwarp/releases">
+          Download
+        </a>
+      </div>
+
+      <div class="terminal-float">
+        <div class="terminal">
+          <div class="terminal-bar">
+            <div class="terminal-dot"></div>
+            <div class="terminal-dot"></div>
+            <div class="terminal-dot"></div>
           </div>
-        </div>
+          <div class="terminal-body"><span class="t-green t-bold">&#9650;</span> <span class="t-cyan t-bold">muxwarp</span> <span class="t-dim">&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;</span> <span class="t-dim">2 hosts &middot; 5 sessions</span>
 
-        <div class="install-box">
-          <div class="install-cmd">
-            <code><span class="prompt">$</span> go install github.com/clintecker/muxwarp/cmd/muxwarp@latest</code>
-            <button class="copy-btn" onclick="navigator.clipboard.writeText('go install github.com/clintecker/muxwarp/cmd/muxwarp@latest')">Copy</button>
-          </div>
+<span class="t-green t-bold">&#9656;</span>  <span class="t-bright">chatalpha</span>     <span class="t-cyan t-bold">&#9671; IDLE</span>  <span class="t-dim">&#9642;</span>      <span class="t-green">indigo</span>
+   <span class="t-white">scenarios</span>     <span class="t-cyan">&#9671; IDLE</span>  <span class="t-dim">&#9642;</span>      <span class="t-green">indigo</span>
+   <span class="t-white">cjdos</span>         <span class="t-green t-bold">&#9670; LIVE</span>  <span class="t-dim">&#9642;&#9642;</span>     <span class="t-green">indigo</span>
+   <span class="t-white">build-farm</span>    <span class="t-cyan">&#9671; IDLE</span>  <span class="t-dim">&#9642;&#9642;&#9642;</span>    <span class="t-green">devbox</span>
+   <span class="t-white">monitoring</span>    <span class="t-green t-bold">&#9670; LIVE</span>  <span class="t-dim">&#9642;</span>      <span class="t-green">devbox</span>
+
+<span class="t-dim">&#8593;/&#8595; navigate &#9474; enter warp &#9474; / filter &#9474; r rescan &#9474; q quit</span></div>
         </div>
       </div>
     </section>
 
-    <section class="features">
+    <!-- ======================== INSTALL ======================== -->
+    <section class="install-section">
+      <div class="install-box">
+        <code><span class="prompt">$</span> go install github.com/clintecker/muxwarp/cmd/muxwarp@latest</code>
+        <button class="copy-btn" onclick="copyInstall(this)">Copy</button>
+      </div>
+    </section>
+
+    <!-- ======================== FEATURES ======================== -->
+    <section class="features" id="features">
       <div class="container">
-        <h2>Why muxwarp</h2>
-        <p class="section-sub">No config duplication. No session creation. Just fast remote tmux attachment.</p>
+        <div class="section-header">
+          <span class="label">Features</span>
+          <h2>Why muxwarp</h2>
+          <p>No config duplication. No session creation. Just fast remote tmux attachment.</p>
+        </div>
+
         <div class="feature-grid">
           <div class="feature-card">
             <div class="feature-icon">&#9889;</div>
             <h3>Parallel scanning</h3>
-            <p>All hosts are scanned concurrently. Sessions stream into the TUI as each host responds &mdash; no waiting for the slowest one.</p>
+            <p>All hosts scanned concurrently. Sessions stream into the TUI as each host responds &mdash; no waiting for the slowest one.</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon">&#128270;</div>
             <h3>Fuzzy filter</h3>
-            <p>Press <code>/</code> and start typing. Fuzzy matching across host and session names with character-level highlighting.</p>
+            <p>Press <code>/</code> and type. Fuzzy matching across host and session names with character-level highlighting.</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon">&#128274;</div>
             <h3>Secure by design</h3>
-            <p>No shell interpolation in SSH commands. Session names validated against strict allowlist. Args passed directly to execve.</p>
+            <p>No shell interpolation. Session names validated against strict allowlist. All args passed directly to execve.</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon">&#128268;</div>
             <h3>Uses your ssh</h3>
-            <p>Calls your system ssh binary directly. All your SSH config, agent forwarding, ProxyCommand, FIDO keys &mdash; everything works.</p>
+            <p>Calls your system ssh binary. All your SSH config, agent forwarding, ProxyCommand, FIDO keys &mdash; it all works.</p>
           </div>
           <div class="feature-card">
             <div class="feature-icon">&#9851;</div>
@@ -561,82 +1037,111 @@
             <p>After ssh exits, you're back in the TUI with a fresh scan. Detach from tmux and pick another session instantly.</p>
           </div>
           <div class="feature-card">
-            <div class="feature-icon">&#127912;</div>
-            <h3>Retro-futurism TUI</h3>
-            <p>Neon gradient header, column-aligned sessions, warp animation with color gradient bar. Built on Bubble Tea v2.</p>
+            <div class="feature-icon">&#9670;</div>
+            <h3>Direct warp</h3>
+            <p>Run <code>muxwarp dev</code> to fuzzy-match and jump straight in. One match = instant warp. Multiple = filtered TUI.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="how-it-works">
+    <!-- ======================== HOW IT WORKS ======================== -->
+    <section class="how-it-works" id="how-it-works">
       <div class="container">
-        <h2>How it works</h2>
-        <div class="steps">
-          <div class="step">
+        <div class="section-header">
+          <span class="label">How it works</span>
+          <h2>Four steps to warp</h2>
+        </div>
+
+        <div class="timeline">
+          <div class="timeline-step">
             <div class="step-num">1</div>
-            <div class="step-content">
-              <h3>Configure your hosts</h3>
-              <p>List your SSH targets in <code>~/.muxwarp.config.yaml</code>. Same strings you'd pass to <code>ssh</code>.</p>
-            </div>
+            <h3>Configure</h3>
+            <p>List your SSH targets in <code>~/.muxwarp.config.yaml</code></p>
           </div>
-          <div class="step">
+          <div class="timeline-step">
             <div class="step-num">2</div>
-            <div class="step-content">
-              <h3>Scan in parallel</h3>
-              <p>muxwarp runs <code>ssh ... tmux list-sessions</code> on every host concurrently. Results stream in as each host responds.</p>
-            </div>
+            <h3>Scan</h3>
+            <p>muxwarp runs <code>tmux list-sessions</code> on every host in parallel</p>
           </div>
-          <div class="step">
+          <div class="timeline-step">
             <div class="step-num">3</div>
-            <div class="step-content">
-              <h3>Pick a session</h3>
-              <p>Navigate the list, use fuzzy filter to search, or run <code>muxwarp &lt;name&gt;</code> to jump straight in.</p>
-            </div>
+            <h3>Pick</h3>
+            <p>Navigate the list or fuzzy-filter to find your session</p>
           </div>
-          <div class="step">
+          <div class="timeline-step">
             <div class="step-num">4</div>
-            <div class="step-content">
-              <h3>Warp</h3>
-              <p>A brief animation plays, then your process is replaced with <code>ssh -t host -- tmux attach</code>. Clean TTY handoff, no orphaned parent.</p>
-            </div>
+            <h3>Warp</h3>
+            <p>Clean TTY handoff via <code>ssh -t</code> &mdash; you're in</p>
           </div>
         </div>
       </div>
     </section>
 
+    <!-- ======================== CONFIG ======================== -->
     <section class="config-section">
       <div class="container">
-        <h2>Simple config</h2>
-        <p class="section-sub">One file. No env vars, no XDG, no merging.</p>
-        <div class="config-example">
-          <pre><span class="comment"># ~/.muxwarp.config.yaml</span>
+        <div class="config-layout">
+          <div class="config-text">
+            <h2>Dead simple config</h2>
+            <p>One YAML file. Same SSH targets you'd type on the command line.</p>
+            <ul class="config-facts">
+              <li><span class="check">&#10003;</span> No env vars, no XDG, no merging</li>
+              <li><span class="check">&#10003;</span> SSH config aliases just work</li>
+              <li><span class="check">&#10003;</span> ProxyCommand, agent forwarding, FIDO keys</li>
+              <li><span class="check">&#10003;</span> Configurable timeout and TERM</li>
+            </ul>
+          </div>
+          <div class="config-code">
+            <pre><span class="comment"># ~/.muxwarp.config.yaml</span>
+
 <span class="key">defaults:</span>
-  <span class="key">timeout:</span> <span class="value">3s</span>               <span class="comment"># per-host SSH timeout</span>
-  <span class="key">term:</span> <span class="value">xterm-256color</span>    <span class="comment"># TERM on attach</span>
+  <span class="key">timeout:</span> <span class="value">3s</span>
+  <span class="key">term:</span> <span class="value">xterm-256color</span>
 
 <span class="key">hosts:</span>
   - <span class="value">clint@indigo</span>
   - <span class="value">clint@devbox</span>
-  - <span class="value">deploy-host</span>           <span class="comment"># SSH config aliases work</span></pre>
+  - <span class="value">deploy-host</span>    <span class="comment"># aliases work</span></pre>
+          </div>
         </div>
       </div>
     </section>
 
+    <!-- ======================== KEYBINDINGS ======================== -->
     <section class="keybindings">
       <div class="container">
-        <h2>Keybindings</h2>
-        <div class="keys-grid">
-          <div class="key-item"><kbd>&#8593;/k</kbd> <span>Move up</span></div>
-          <div class="key-item"><kbd>&#8595;/j</kbd> <span>Move down</span></div>
-          <div class="key-item"><kbd>Enter</kbd> <span>Warp in</span></div>
-          <div class="key-item"><kbd>/</kbd> <span>Fuzzy filter</span></div>
-          <div class="key-item"><kbd>Esc</kbd> <span>Clear filter</span></div>
-          <div class="key-item"><kbd>r</kbd> <span>Rescan hosts</span></div>
-          <div class="key-item"><kbd>q</kbd> <span>Quit</span></div>
-          <div class="key-item"><kbd>Ctrl+C</kbd> <span>Force quit</span></div>
+        <div class="section-header">
+          <span class="label">Controls</span>
+          <h2>Keybindings</h2>
+        </div>
+
+        <div class="keys-wrap">
+          <div class="key-pill"><kbd>&#8593;/k</kbd> <span>Move up</span></div>
+          <div class="key-pill"><kbd>&#8595;/j</kbd> <span>Move down</span></div>
+          <div class="key-pill"><kbd>Enter</kbd> <span>Warp in</span></div>
+          <div class="key-pill"><kbd>/</kbd> <span>Fuzzy filter</span></div>
+          <div class="key-pill"><kbd>Esc</kbd> <span>Clear filter</span></div>
+          <div class="key-pill"><kbd>r</kbd> <span>Rescan</span></div>
+          <div class="key-pill"><kbd>q</kbd> <span>Quit</span></div>
+          <div class="key-pill"><kbd>Ctrl+C</kbd> <span>Force quit</span></div>
         </div>
       </div>
+    </section>
+
+    <!-- ======================== CTA ======================== -->
+    <section class="cta">
+      <div class="cta-rings">
+        <div class="ring"></div>
+        <div class="ring"></div>
+        <div class="ring"></div>
+        <div class="ring"></div>
+      </div>
+      <h2>Ready to warp?</h2>
+      <p>One binary. Zero dependencies beyond ssh and tmux.</p>
+      <a class="btn btn-green" href="https://github.com/clintecker/muxwarp">
+        Get started
+      </a>
     </section>
   </main>
 
@@ -649,5 +1154,14 @@
       </p>
     </div>
   </footer>
+
+  <script>
+    function copyInstall(btn) {
+      navigator.clipboard.writeText('go install github.com/clintecker/muxwarp/cmd/muxwarp@latest');
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(function() { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    }
+  </script>
 </body>
 </html>
