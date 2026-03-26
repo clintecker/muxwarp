@@ -45,8 +45,8 @@ Fuzzy-matches `<name>` against session names (and host names) across all hosts.
 
 ```yaml
 hosts:
-  - clint@indigo
-  - clint@clint-devboi
+  - alice@atlas
+  - alice@forge
 ```
 
 That's it. Each entry is an SSH target string passed directly to your system `ssh` binary. Leverages your existing `~/.ssh/config`, ssh-agent, keys, ProxyCommand — everything.
@@ -59,8 +59,8 @@ defaults:
   term: xterm-256color    # TERM to set on attach (default: xterm-256color)
 
 hosts:
-  - clint@indigo
-  - clint@clint-devboi
+  - alice@atlas
+  - alice@forge
 ```
 
 ### Config resolution
@@ -77,10 +77,10 @@ No env var overrides, no XDG, no merging. One file, one location.
 ```
 ▲ muxwarp ─────────────────────────────────── 2 hosts · 4 sessions
 
-▸  cjdos          ◇ IDLE  ▪▪▪▪▪                           indigo
-   build-farm     ◇ IDLE  ▪▪                               indigo
-   hacking        ◇ IDLE  ▪▪▪                              devboi
-   monitoring     ◆ LIVE  ▪                                devboi
+▸  api-server     ◇ IDLE  ▪▪▪▪▪                           atlas
+   web-dev        ◇ IDLE  ▪▪                               atlas
+   build-main     ◇ IDLE  ▪▪▪                              forge
+   monitoring     ◆ LIVE  ▪                                forge
 
 ↑/↓ navigate │ enter warp │ / filter │ r rescan │ q quit
 ```
@@ -106,7 +106,7 @@ A single flat list. Every session from every host, interleaved. Each row:
   - `◆ LIVE` (green) — session has attached clients
   - `◇ IDLE` (cyan) — session is detached
 - **dots**: `▪` repeated per window count. Color: dim slate
-- **host**: short name extracted from the SSH target (e.g., `clint@indigo` -> `indigo`), right-aligned, very dim. Color: #4A4A5E with faint
+- **host**: short name extracted from the SSH target (e.g., `alice@atlas` -> `atlas`), right-aligned, very dim. Color: #4A4A5E with faint
 
 The selected row gets a subtle background tint.
 
@@ -160,10 +160,10 @@ When the user presses Enter on a session:
 3. Brief animation (~200ms total, 4 frames at ~50ms each) rendered with plain fmt.Print:
 
 ```
-engaging jumpgate: indigo/cjdos █
-engaging jumpgate: indigo/cjdos ████
-engaging jumpgate: indigo/cjdos ████████
-engaging jumpgate: indigo/cjdos ██████████████
+engaging jumpgate: atlas/api-server █
+engaging jumpgate: atlas/api-server ████
+engaging jumpgate: atlas/api-server ████████
+engaging jumpgate: atlas/api-server ██████████████
 ```
 
 Block bar uses a cyan-to-lavender gradient, width capped to `terminal_width - label_length`.
@@ -176,12 +176,12 @@ Bubble Tea owns the terminal (raw mode, alt screen). If we `syscall.Exec` while 
 
 ### Direct warp mode
 
-`muxwarp cjdos` skips the TUI entirely on single match:
+`muxwarp api-server` skips the TUI entirely on single match:
 1. Scan all hosts (same parallel scan, with a CLI spinner)
-2. Fuzzy match "cjdos" against all session names
+2. Fuzzy match "api-server" against all session names
 3. Single match -> warp animation + exec
 4. Multiple matches -> open TUI pre-filtered
-5. Zero matches -> `error: no sessions matching "cjdos"` and exit 1
+5. Zero matches -> `error: no sessions matching "api-server"` and exit 1
 
 ## SSH Exec — Command Construction and Security
 
@@ -337,8 +337,8 @@ type Defaults struct {
 
 // Scanner results
 type Session struct {
-    Host      string // SSH target (clint@indigo)
-    HostShort string // display name (indigo)
+    Host      string // SSH target (alice@atlas)
+    HostShort string // display name (atlas)
     Name      string // tmux session name (validated)
     Attached  int    // number of attached clients
     Windows   int    // number of windows

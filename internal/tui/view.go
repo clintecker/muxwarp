@@ -193,10 +193,21 @@ func renderSelector(selected bool) string {
 
 // renderBadge returns the status badge adapted to terminal width.
 func renderBadge(s Session, termWidth int) string {
+	if s.IsGhost() {
+		return renderNewBadge(termWidth)
+	}
 	if termWidth >= 80 {
 		return renderFullBadge(s)
 	}
 	return renderCompactBadge(s)
+}
+
+// renderNewBadge returns the NEW badge for ghost sessions.
+func renderNewBadge(termWidth int) string {
+	if termWidth >= 80 {
+		return newBadgeStyle.Render("◌ NEW")
+	}
+	return newBadgeStyle.Render("◌")
 }
 
 // renderFullBadge returns a badge with diamond symbol and text label.
@@ -215,9 +226,9 @@ func renderCompactBadge(s Session) string {
 	return liveBadgeStyle.Render("◆")
 }
 
-// renderWindows returns window dots (▪), or empty below width 60.
+// renderWindows returns window dots (▪), or empty below width 60 or for ghosts.
 func renderWindows(s Session, termWidth int) string {
-	if termWidth < 60 || s.Windows == 0 {
+	if termWidth < 60 || s.Windows == 0 || s.IsGhost() {
 		return ""
 	}
 	return windowDotStyle.Render(strings.Repeat("▪", s.Windows))

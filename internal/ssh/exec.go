@@ -64,6 +64,48 @@ func ExecReplace(target, term, sessionName string) error {
 	return syscall.Exec(sshPath, argv, os.Environ())
 }
 
+// BuildCreateSessionArgs constructs the ssh argv for creating a detached tmux session.
+//
+// Produces:
+//
+//	ssh -t <target> -- env TERM=<term> tmux new-session -d -s <name> [-c <dir>] [<cmd args...>]
+func BuildCreateSessionArgs(target, term, name, dir, cmd string) ([]string, error) {
+	if !ValidSessionName(name) {
+		return nil, fmt.Errorf("invalid session name: %q", name)
+	}
+
+	args := []string{
+		"ssh", "-t", target, "--",
+		"env", "TERM=" + term, "tmux", "new-session", "-d", "-s", name,
+	}
+	if dir != "" {
+		args = append(args, "-c", dir)
+	}
+	if cmd != "" {
+		args = append(args, strings.Fields(cmd)...)
+	}
+	return args, nil
+}
+
+// CreateSession creates a detached tmux session on a remote host via SSH.
+func CreateSession(target, term, name, dir, cmd string) error {
+	argv, err := BuildCreateSessionArgs(target, term, name, dir, cmd)
+	if err != nil {
+		return err
+	}
+
+	sshPath, err := exec.LookPath("ssh")
+	if err != nil {
+		return fmt.Errorf("ssh not found in PATH: %w", err)
+	}
+
+	c := exec.Command(sshPath, argv[1:]...)
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	return c.Run()
+}
+
 // ExecChild runs ssh as a child process and waits for it to exit.
 // Unlike ExecReplace, this returns when ssh exits, allowing the caller
 // to resume (e.g. re-launch the TUI).

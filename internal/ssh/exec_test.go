@@ -90,6 +90,87 @@ func assertArgContains(t *testing.T, args []string, value, label string) {
 	t.Errorf("BuildScanArgs missing %s (%q): %v", label, value, args)
 }
 
+func assertArgsEqual(t *testing.T, label string, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("%s length = %d, want %d\ngot:  %v\nwant: %v", label, len(got), len(want), got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("%s[%d] = %q, want %q", label, i, got[i], want[i])
+		}
+	}
+}
+
+func TestBuildCreateSessionArgs_Basic(t *testing.T) {
+	t.Parallel()
+
+	args, err := BuildCreateSessionArgs("clint@indigo", "xterm-256color", "myproj", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []string{
+		"ssh", "-t", "clint@indigo", "--",
+		"env", "TERM=xterm-256color", "tmux", "new-session", "-d", "-s", "myproj",
+	}
+	assertArgsEqual(t, "BuildCreateSessionArgs", args, want)
+}
+
+func TestBuildCreateSessionArgs_WithDir(t *testing.T) {
+	t.Parallel()
+
+	args, err := BuildCreateSessionArgs("clint@indigo", "xterm-256color", "myproj", "~/code/myproj", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []string{
+		"ssh", "-t", "clint@indigo", "--",
+		"env", "TERM=xterm-256color", "tmux", "new-session", "-d", "-s", "myproj",
+		"-c", "~/code/myproj",
+	}
+	assertArgsEqual(t, "BuildCreateSessionArgs", args, want)
+}
+
+func TestBuildCreateSessionArgs_WithCmd(t *testing.T) {
+	t.Parallel()
+
+	args, err := BuildCreateSessionArgs("clint@indigo", "xterm-256color", "myproj", "", "claude --dangerously-skip-permissions")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []string{
+		"ssh", "-t", "clint@indigo", "--",
+		"env", "TERM=xterm-256color", "tmux", "new-session", "-d", "-s", "myproj",
+		"claude", "--dangerously-skip-permissions",
+	}
+	assertArgsEqual(t, "BuildCreateSessionArgs", args, want)
+}
+
+func TestBuildCreateSessionArgs_NoShellInterpolation(t *testing.T) {
+	t.Parallel()
+
+	args, err := BuildCreateSessionArgs("user@host", "xterm-256color", "safe", "", "echo $(whoami)")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// "echo" and "$(whoami)" must be separate args — no shell evaluation.
+	assertArgContains(t, args, "echo", "echo command")
+	assertArgContains(t, args, "$(whoami)", "unevaluated subshell")
+}
+
+func TestBuildCreateSessionArgs_InvalidName(t *testing.T) {
+	t.Parallel()
+
+	_, err := BuildCreateSessionArgs("user@host", "xterm-256color", "bad;name", "", "")
+	if err == nil {
+		t.Fatal("expected error for invalid session name, got nil")
+	}
+}
+
 func TestHostShort(t *testing.T) {
 	t.Parallel()
 

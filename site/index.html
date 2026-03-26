@@ -982,11 +982,11 @@
           </div>
           <div class="terminal-body"><span class="t-green t-bold">&#9650;</span> <span class="t-cyan t-bold">muxwarp</span> <span class="t-dim">&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;</span> <span class="t-dim">2 hosts &middot; 5 sessions</span>
 
-<span class="t-green t-bold">&#9656;</span>  <span class="t-bright">chatalpha</span>     <span class="t-cyan t-bold">&#9671; IDLE</span>  <span class="t-dim">&#9642;</span>      <span class="t-green">indigo</span>
-   <span class="t-white">scenarios</span>     <span class="t-cyan">&#9671; IDLE</span>  <span class="t-dim">&#9642;</span>      <span class="t-green">indigo</span>
-   <span class="t-white">cjdos</span>         <span class="t-green t-bold">&#9670; LIVE</span>  <span class="t-dim">&#9642;&#9642;</span>     <span class="t-green">indigo</span>
-   <span class="t-white">build-farm</span>    <span class="t-cyan">&#9671; IDLE</span>  <span class="t-dim">&#9642;&#9642;&#9642;</span>    <span class="t-green">devbox</span>
-   <span class="t-white">monitoring</span>    <span class="t-green t-bold">&#9670; LIVE</span>  <span class="t-dim">&#9642;</span>      <span class="t-green">devbox</span>
+<span class="t-green t-bold">&#9656;</span>  <span class="t-bright">api-server</span>    <span class="t-cyan t-bold">&#9671; IDLE</span>  <span class="t-dim">&#9642;</span>      <span class="t-green">atlas</span>
+   <span class="t-white">web-dev</span>       <span class="t-cyan">&#9671; IDLE</span>  <span class="t-dim">&#9642;</span>      <span class="t-green">atlas</span>
+   <span class="t-white">deploy</span>        <span class="t-green t-bold">&#9670; LIVE</span>  <span class="t-dim">&#9642;&#9642;</span>     <span class="t-green">atlas</span>
+   <span class="t-white">build-main</span>    <span class="t-cyan">&#9671; IDLE</span>  <span class="t-dim">&#9642;&#9642;&#9642;</span>    <span class="t-green">forge</span>
+   <span class="t-white">new-project</span>   <span style="color:#BD93F9;font-weight:bold">&#9676; NEW</span>          <span class="t-green">forge</span>
 
 <span class="t-dim">&#8593;/&#8595; navigate &#9474; enter warp &#9474; / filter &#9474; r rescan &#9474; q quit</span></div>
         </div>
@@ -1040,6 +1040,11 @@
             <div class="feature-icon">&#9670;</div>
             <h3>Direct warp</h3>
             <p>Run <code>muxwarp dev</code> to fuzzy-match and jump straight in. One match = instant warp. Multiple = filtered TUI.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">&#9676;</div>
+            <h3>Desired sessions</h3>
+            <p>Declare sessions in your config. If they don't exist yet, they appear as ghost entries (&#9676; NEW). Warp in to create them on-the-fly.</p>
           </div>
         </div>
       </div>
@@ -1100,9 +1105,12 @@
   <span class="key">term:</span> <span class="value">xterm-256color</span>
 
 <span class="key">hosts:</span>
-  - <span class="value">clint@indigo</span>
-  - <span class="value">clint@devbox</span>
-  - <span class="value">deploy-host</span>    <span class="comment"># aliases work</span></pre>
+  - <span class="value">alice@atlas</span>
+  - <span class="key">target:</span> <span class="value">alice@forge</span>
+    <span class="key">sessions:</span>
+      - <span class="key">name:</span> <span class="value">myproject</span>
+        <span class="key">dir:</span> <span class="value">~/code/myproject</span>
+  - <span class="value">workstation</span>    <span class="comment"># aliases work</span></pre>
           </div>
         </div>
       </div>

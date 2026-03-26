@@ -7,14 +7,24 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+// DesiredInfo holds creation metadata for a ghost session (desired but not yet existing).
+type DesiredInfo struct {
+	Dir string
+	Cmd string
+}
+
 // Session represents a remote tmux session discovered by the scanner.
 type Session struct {
-	Host      string // full hostname
-	HostShort string // abbreviated hostname
-	Name      string // tmux session name
-	Attached  int    // number of attached clients (0 = free)
-	Windows   int    // number of windows
+	Host      string       // full hostname
+	HostShort string       // abbreviated hostname
+	Name      string       // tmux session name
+	Attached  int          // number of attached clients (0 = free)
+	Windows   int          // number of windows
+	Desired   *DesiredInfo // non-nil for ghost sessions (desired but not yet created)
 }
+
+// IsGhost returns true if this session is desired but doesn't exist yet.
+func (s Session) IsGhost() bool { return s.Desired != nil }
 
 // Key returns a unique identifier for this session.
 func (s Session) Key() string { return s.Host + "/" + s.Name }
@@ -115,8 +125,11 @@ func sessionLess(a, b Session) int {
 	return cmp.Compare(a.Name, b.Name)
 }
 
-// attachedRank returns 0 for IDLE sessions and 1 for LIVE, so IDLE sorts first.
+// attachedRank returns 0 for IDLE, 1 for LIVE, 2 for NEW (ghost) sessions.
 func attachedRank(s Session) int {
+	if s.IsGhost() {
+		return 2
+	}
 	if s.Attached == 0 {
 		return 0
 	}

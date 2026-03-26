@@ -271,3 +271,26 @@ func runesMatch(a, b []rune) bool {
 	}
 	return true
 }
+
+func TestView_GhostBadge(t *testing.T) {
+	m := newTestModel(1)
+
+	// Add a ghost session and a normal session.
+	sessions := []Session{
+		{Host: "alpha", HostShort: "alpha", Name: "dev", Attached: 0, Windows: 1},
+		{Host: "alpha", HostShort: "alpha", Name: "newproj", Desired: &DesiredInfo{Dir: "~/code"}},
+	}
+	newM, _ := m.Update(SessionBatchMsg{Host: "alpha", Sessions: sessions})
+	m = newM.(Model)
+	newM, _ = m.Update(ScanDoneMsg{})
+	m = newM.(Model)
+
+	v := m.View()
+
+	if !strings.Contains(v.Content, "NEW") {
+		t.Error("View should contain 'NEW' badge for ghost session")
+	}
+	if !strings.Contains(v.Content, "◌") {
+		t.Error("View should contain '◌' symbol for ghost session")
+	}
+}

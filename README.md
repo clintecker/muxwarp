@@ -7,20 +7,20 @@
 Warp into tmux sessions on remote machines.
 
 muxwarp scans your configured SSH hosts in parallel, finds every running tmux
-session, and presents them in a TUI. Pick one, hit enter, and you're in. No
-session creation, no local tmux management, no SSH config duplication -- just
-fast remote tmux attachment.
+session, and presents them in a TUI. Pick one, hit enter, and you're in.
+
+Declare desired sessions in your config and muxwarp shows them as ghost entries
+(◌ NEW) even before they exist. Warp into one and it's created on-the-fly.
 
 ## What it looks like
 
 ```
-▲ muxwarp ──────────────────────── 2 hosts · 5 sessions
+▲ muxwarp ──────────────── 1 host · 4 sessions
 
-▸  chatalpha     ◇ IDLE  ▪      indigo
-   scenarios     ◇ IDLE  ▪      indigo
-   cjdos         ◆ LIVE  ▪▪     indigo
-   build-farm    ◇ IDLE  ▪▪▪    devbox
-   monitoring    ◆ LIVE  ▪      devbox
+▸  api-server    ◇ IDLE  ▪      atlas
+   web-dev       ◇ IDLE  ▪      atlas
+   deploy        ◆ LIVE  ▪▪     atlas
+   new-project   ◌ NEW          atlas      ← desired but doesn't exist yet
 
 ↑/↓ navigate │ enter warp │ / filter │ r rescan │ q quit
 ```
@@ -90,10 +90,20 @@ defaults:
   term: xterm-256color       # TERM to set when attaching
 
 hosts:
-  - user@server1
-  - user@server2
-  - devbox                   # SSH config aliases work too
+  - user@server1             # plain string (just scan)
+  - target: user@server2     # object with desired sessions
+    sessions:
+      - name: myproject
+        dir: ~/code/myproject
+        cmd: nvim
+      - name: api-dev
+        dir: ~/code/api
+  - workstation              # SSH config aliases work too
 ```
+
+Plain string entries scan for existing sessions. Object entries with `sessions`
+also create ghost entries (◌ NEW) for any desired sessions that don't exist yet.
+Warping into a ghost creates the session on the remote host before attaching.
 
 See [`examples/muxwarp.config.yaml`](examples/muxwarp.config.yaml) for an
 annotated example.

@@ -177,6 +177,37 @@ func TestWarpTargetNilByDefault(t *testing.T) {
 	}
 }
 
+func TestIsGhost(t *testing.T) {
+	normal := Session{Host: "alpha", Name: "dev"}
+	if normal.IsGhost() {
+		t.Error("Session without Desired should not be a ghost")
+	}
+
+	ghost := Session{Host: "alpha", Name: "new", Desired: &DesiredInfo{Dir: "~/code"}}
+	if !ghost.IsGhost() {
+		t.Error("Session with Desired should be a ghost")
+	}
+}
+
+func TestSortSessions_WithGhosts(t *testing.T) {
+	sessions := []Session{
+		{Host: "alpha", HostShort: "alpha", Name: "ghost1", Desired: &DesiredInfo{}},
+		{Host: "alpha", HostShort: "alpha", Name: "live", Attached: 1, Windows: 2},
+		{Host: "alpha", HostShort: "alpha", Name: "idle", Attached: 0, Windows: 1},
+		{Host: "alpha", HostShort: "alpha", Name: "ghost2", Desired: &DesiredInfo{}},
+	}
+
+	sortSessions(sessions)
+
+	// Expected: IDLE → LIVE → NEW (ghosts), alphabetical within each group.
+	wantNames := []string{"idle", "live", "ghost1", "ghost2"}
+	for i, want := range wantNames {
+		if sessions[i].Name != want {
+			t.Errorf("sessions[%d].Name = %q, want %q", i, sessions[i].Name, want)
+		}
+	}
+}
+
 func TestVisibleRows(t *testing.T) {
 	m := NewModel(1)
 	m.height = 30

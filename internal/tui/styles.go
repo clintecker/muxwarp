@@ -96,6 +96,11 @@ var (
 	emptyStyle = lipgloss.NewStyle().
 			Foreground(colorSlate)
 
+	// NEW badge (ghost/desired session).
+	newBadgeStyle = lipgloss.NewStyle().
+			Foreground(colorLavender).
+			Bold(true)
+
 	// Empty state command hint.
 	emptyHintStyle = lipgloss.NewStyle().
 			Foreground(colorLavender)

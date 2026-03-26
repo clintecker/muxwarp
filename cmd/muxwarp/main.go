@@ -54,17 +54,27 @@ func tuiMode(cfg *config.Config, timeoutSec string) {
 		if target == nil {
 			return // user quit
 		}
-
-		tui.PlayWarpAnimation(target.HostShort, target.Name, termWidth)
-
-		if err := ssh.ExecChild(target.Host, cfg.Defaults.Term, target.Name); err != nil {
-			fmt.Fprintf(os.Stderr, "ssh error: %v\n", err)
-		}
-
-		fmt.Println(tui.ReturnMessage())
-		time.Sleep(400 * time.Millisecond)
+		warpChild(cfg, target, termWidth)
 		// loop: fresh rescan, new TUI
 	}
+}
+
+// warpChild creates the session if needed, plays animations, runs ssh
+// as a child process, and prints the return message.
+func warpChild(cfg *config.Config, target *tui.Session, termWidth int) {
+	if err := maybeCreateSession(cfg, target, termWidth); err != nil {
+		fmt.Fprintf(os.Stderr, "create error: %v\n", err)
+		return
+	}
+
+	tui.PlayWarpAnimation(target.HostShort, target.Name, termWidth)
+
+	if err := ssh.ExecChild(target.Host, cfg.Defaults.Term, target.Name); err != nil {
+		fmt.Fprintf(os.Stderr, "ssh error: %v\n", err)
+	}
+
+	fmt.Println(tui.ReturnMessage())
+	time.Sleep(400 * time.Millisecond)
 }
 
 // runTUIOnce runs a single TUI session with background scanning. Returns
@@ -75,16 +85,8 @@ func runTUIOnce(cfg *config.Config, timeoutSec string) (*tui.Session, int) {
 	m := tui.NewModel(len(cfg.Hosts))
 	p := tea.NewProgram(m)
 
-	// Start scanning in background.
-	go func() {
-		_ = scanner.ScanAll(ctx, cfg.Hosts, 8, timeoutSec, func(host string, sessions []scanner.Session) {
-			p.Send(tui.SessionBatchMsg{
-				Host:     host,
-				Sessions: scannerToTUI(sessions),
-			})
-		})
-		p.Send(tui.ScanDoneMsg{})
-	}()
+	// Start scanning in background, then inject ghosts for desired sessions.
+	go scanAndSend(ctx, cfg, timeoutSec, p)
 
 	finalModel, err := p.Run()
 	cancel() // stop any in-flight scans
@@ -102,6 +104,23 @@ func runTUIOnce(cfg *config.Config, timeoutSec string) (*tui.Session, int) {
 	return fm.WarpTarget(), fm.Width()
 }
 
+// scanAndSend runs the scanner and sends results to the TUI, injecting
+// ghost sessions for any desired sessions not found in the scan.
+func scanAndSend(ctx context.Context, cfg *config.Config, timeoutSec string, p *tea.Program) {
+	var found []tui.Session
+	_ = scanner.ScanAll(ctx, cfg.HostTargets(), 8, timeoutSec, func(host string, sessions []scanner.Session) {
+		batch := scannerToTUI(sessions)
+		found = append(found, batch...)
+		p.Send(tui.SessionBatchMsg{Host: host, Sessions: batch})
+	})
+
+	ghosts := buildGhosts(cfg, found)
+	if len(ghosts) > 0 {
+		p.Send(tui.SessionBatchMsg{Host: "ghosts", Sessions: ghosts})
+	}
+	p.Send(tui.ScanDoneMsg{})
+}
+
 // directWarp handles `muxwarp <pattern>` — scan, fuzzy match, then warp.
 func directWarp(cfg *config.Config, timeoutSec, pattern string) {
 	fmt.Fprintf(os.Stderr, "Scanning gates...\n")
@@ -109,10 +128,12 @@ func directWarp(cfg *config.Config, timeoutSec, pattern string) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var allSessions []tui.Session
-	_ = scanner.ScanAll(ctx, cfg.Hosts, 8, timeoutSec, func(_ string, sessions []scanner.Session) {
+	_ = scanner.ScanAll(ctx, cfg.HostTargets(), 8, timeoutSec, func(_ string, sessions []scanner.Session) {
 		allSessions = append(allSessions, scannerToTUI(sessions)...)
 	})
 	cancel()
+
+	allSessions = append(allSessions, buildGhosts(cfg, allSessions)...)
 
 	if len(allSessions) == 0 {
 		fmt.Fprintf(os.Stderr, "No sessions found on any host.\n")
@@ -156,15 +177,7 @@ func directWarpMultiple(cfg *config.Config, allSessions []tui.Session, pattern, 
 		return
 	}
 
-	termWidth := fm.Width()
-	tui.PlayWarpAnimation(target.HostShort, target.Name, termWidth)
-
-	if err := ssh.ExecChild(target.Host, cfg.Defaults.Term, target.Name); err != nil {
-		fmt.Fprintf(os.Stderr, "ssh error: %v\n", err)
-	}
-
-	fmt.Println(tui.ReturnMessage())
-	time.Sleep(400 * time.Millisecond)
+	warpChild(cfg, target, fm.Width())
 
 	// Fall through to tuiMode loop for reconnection.
 	tuiMode(cfg, timeoutSec)
@@ -172,11 +185,72 @@ func directWarpMultiple(cfg *config.Config, allSessions []tui.Session, pattern, 
 
 // warp plays the animation and execs into ssh. Never returns on success.
 func warp(cfg *config.Config, target *tui.Session) {
+	if err := maybeCreateSession(cfg, target, 80); err != nil {
+		fmt.Fprintf(os.Stderr, "create error: %v\n", err)
+		os.Exit(1)
+	}
+
 	tui.PlayWarpAnimation(target.HostShort, target.Name, 80)
 
 	if err := ssh.ExecReplace(target.Host, cfg.Defaults.Term, target.Name); err != nil {
 		fmt.Fprintf(os.Stderr, "exec error: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+// maybeCreateSession creates a remote tmux session if the target is a ghost.
+func maybeCreateSession(cfg *config.Config, target *tui.Session, termWidth int) error {
+	if !target.IsGhost() {
+		return nil
+	}
+
+	tui.PlayCreationAnimation(target.HostShort, target.Name, termWidth)
+	return ssh.CreateSession(target.Host, cfg.Defaults.Term, target.Name, target.Desired.Dir, target.Desired.Cmd)
+}
+
+// buildGhosts creates ghost sessions for desired sessions not found in the scan.
+func buildGhosts(cfg *config.Config, found []tui.Session) []tui.Session {
+	var ghosts []tui.Session
+	for _, h := range cfg.Hosts {
+		ghosts = append(ghosts, ghostsForHost(h, found)...)
+	}
+	return ghosts
+}
+
+// ghostsForHost returns ghost sessions for one host entry.
+func ghostsForHost(h config.HostEntry, found []tui.Session) []tui.Session {
+	if len(h.Sessions) == 0 {
+		return nil
+	}
+
+	existing := existingNames(h.Target, found)
+	var ghosts []tui.Session
+	for _, ds := range h.Sessions {
+		if existing[ds.Name] {
+			continue
+		}
+		ghosts = append(ghosts, newGhostSession(h.Target, ds))
+	}
+	return ghosts
+}
+
+// existingNames returns the set of session names already found for a host.
+func existingNames(target string, found []tui.Session) map[string]bool {
+	names := make(map[string]bool)
+	for _, s := range found {
+		if s.Host == target {
+			names[s.Name] = true
+		}
+	}
+	return names
+}
+
+func newGhostSession(target string, ds config.DesiredSession) tui.Session {
+	return tui.Session{
+		Host:      target,
+		HostShort: ssh.HostShort(target),
+		Name:      ds.Name,
+		Desired:   &tui.DesiredInfo{Dir: ds.Dir, Cmd: ds.Cmd},
 	}
 }
 

@@ -31,8 +31,8 @@ func TestLoad_Minimal(t *testing.T) {
 		if len(cfg.Hosts) != 2 {
 			t.Fatalf("expected 2 hosts, got %d", len(cfg.Hosts))
 		}
-		assertString(t, "host[0]", cfg.Hosts[0], "server1")
-		assertString(t, "host[1]", cfg.Hosts[1], "server2")
+		assertString(t, "host[0].Target", cfg.Hosts[0].Target, "server1")
+		assertString(t, "host[1].Target", cfg.Hosts[1].Target, "server2")
 	})
 }
 
@@ -68,6 +68,154 @@ hosts:
 	}
 	if cfg.Defaults.Term != "screen-256color" {
 		t.Errorf("expected term %q, got %q", "screen-256color", cfg.Defaults.Term)
+	}
+}
+
+// TestLoad_MixedHosts tests that a config with both string and object hosts parses correctly.
+func TestLoad_MixedHosts(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+
+	content := []byte(`hosts:
+  - server1
+  - target: clint@indigo
+    sessions:
+      - name: cjdos
+        dir: ~/code/cjdos
+        cmd: claude --dangerously-skip-permissions
+      - name: tesseract
+        dir: ~/code/tesseract
+  - server3
+`)
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
+
+	if len(cfg.Hosts) != 3 {
+		t.Fatalf("expected 3 hosts, got %d", len(cfg.Hosts))
+	}
+
+	assertString(t, "host[0].Target", cfg.Hosts[0].Target, "server1")
+	assertString(t, "host[1].Target", cfg.Hosts[1].Target, "clint@indigo")
+	assertString(t, "host[2].Target", cfg.Hosts[2].Target, "server3")
+
+	if len(cfg.Hosts[1].Sessions) != 2 {
+		t.Fatalf("expected 2 sessions for host[1], got %d", len(cfg.Hosts[1].Sessions))
+	}
+
+	assertString(t, "session[0].Name", cfg.Hosts[1].Sessions[0].Name, "cjdos")
+	assertString(t, "session[0].Dir", cfg.Hosts[1].Sessions[0].Dir, "~/code/cjdos")
+	assertString(t, "session[0].Cmd", cfg.Hosts[1].Sessions[0].Cmd, "claude --dangerously-skip-permissions")
+	assertString(t, "session[1].Name", cfg.Hosts[1].Sessions[1].Name, "tesseract")
+	assertString(t, "session[1].Dir", cfg.Hosts[1].Sessions[1].Dir, "~/code/tesseract")
+	assertString(t, "session[1].Cmd", cfg.Hosts[1].Sessions[1].Cmd, "")
+}
+
+// TestLoad_HostTargets tests that HostTargets returns a flat string list.
+func TestLoad_HostTargets(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+
+	content := []byte(`hosts:
+  - server1
+  - target: clint@indigo
+    sessions:
+      - name: dev
+  - server3
+`)
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
+
+	targets := cfg.HostTargets()
+	if len(targets) != 3 {
+		t.Fatalf("expected 3 targets, got %d", len(targets))
+	}
+	assertString(t, "targets[0]", targets[0], "server1")
+	assertString(t, "targets[1]", targets[1], "clint@indigo")
+	assertString(t, "targets[2]", targets[2], "server3")
+}
+
+func loadDesiredSessionsConfig(t *testing.T) *Config {
+	t.Helper()
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+
+	content := []byte(`hosts:
+  - server1
+  - target: clint@indigo
+    sessions:
+      - name: cjdos
+        dir: ~/code/cjdos
+      - name: tesseract
+`)
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
+	return cfg
+}
+
+func TestLoad_DesiredSessions_WithSessions(t *testing.T) {
+	cfg := loadDesiredSessionsConfig(t)
+	sessions := cfg.DesiredSessionsFor("clint@indigo")
+	if len(sessions) != 2 {
+		t.Fatalf("expected 2 desired sessions, got %d", len(sessions))
+	}
+	assertString(t, "sessions[0].Name", sessions[0].Name, "cjdos")
+	assertString(t, "sessions[1].Name", sessions[1].Name, "tesseract")
+}
+
+func TestLoad_DesiredSessions_NoSessions(t *testing.T) {
+	cfg := loadDesiredSessionsConfig(t)
+	sessions := cfg.DesiredSessionsFor("server1")
+	if len(sessions) != 0 {
+		t.Errorf("expected 0 desired sessions for server1, got %d", len(sessions))
+	}
+}
+
+func TestLoad_DesiredSessions_UnknownHost(t *testing.T) {
+	cfg := loadDesiredSessionsConfig(t)
+	sessions := cfg.DesiredSessionsFor("unknown")
+	if sessions != nil {
+		t.Errorf("expected nil for unknown host, got %v", sessions)
+	}
+}
+
+// TestLoad_InvalidSessionName tests that a config with an invalid session name returns an error.
+func TestLoad_InvalidSessionName(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+
+	content := []byte(`hosts:
+  - target: server1
+    sessions:
+      - name: "bad;name"
+`)
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(cfgPath)
+	if err == nil {
+		t.Fatal("Load() expected error for invalid session name, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid session name") {
+		t.Errorf("expected error containing %q, got %q", "invalid session name", err.Error())
 	}
 }
 

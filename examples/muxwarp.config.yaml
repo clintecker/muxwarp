@@ -18,10 +18,24 @@ defaults:
 # Each entry is passed directly to your system ssh binary, so anything
 # that works with `ssh <target>` works here. That means ~/.ssh/config
 # aliases, user@host, bare hostnames, IPs -- all valid.
+#
+# Entries can be plain strings or objects with desired sessions.
 hosts:
   # Simple user@host format
-  - clint@indigo
-  - clint@devboi
+  - alice@atlas
+  - alice@forge
+
+  # Object format with desired sessions.
+  # If a desired session doesn't exist on the host, muxwarp shows it as
+  # a ghost entry (◌ NEW) in the TUI. Warping into it creates the session
+  # on-demand before attaching.
+  # - target: alice@workstation
+  #   sessions:
+  #     - name: myproject
+  #       dir: ~/code/myproject
+  #       cmd: nvim
+  #     - name: api-dev
+  #       dir: ~/code/api
 
   # Bare hostname (uses your SSH config for user, key, etc.)
   # - workstation
