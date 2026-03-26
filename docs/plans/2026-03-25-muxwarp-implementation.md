@@ -129,7 +129,7 @@ At each Quality Gate, use Ralph Loops for iterative polish. The prompts are embe
 
 ```bash
 cd /Users/clint/code/muxwarp
-go mod init github.com/clint/muxwarp
+go mod init github.com/clintecker/muxwarp
 go get charm.land/bubbletea/v2@latest
 go get github.com/charmbracelet/bubbles@latest
 go get github.com/charmbracelet/lipgloss@latest
@@ -271,7 +271,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/clint/muxwarp/internal/config"
+	"github.com/clintecker/muxwarp/internal/config"
 )
 
 func TestLoad_Minimal(t *testing.T) {
@@ -442,7 +442,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/clint/muxwarp/internal/config"
+	"github.com/clintecker/muxwarp/internal/config"
 )
 
 var (
@@ -515,7 +515,7 @@ package ssh_test
 import (
 	"testing"
 
-	"github.com/clint/muxwarp/internal/ssh"
+	"github.com/clintecker/muxwarp/internal/ssh"
 )
 
 func TestValidSessionName(t *testing.T) {
@@ -603,7 +603,7 @@ package ssh_test
 import (
 	"testing"
 
-	"github.com/clint/muxwarp/internal/ssh"
+	"github.com/clintecker/muxwarp/internal/ssh"
 )
 
 func TestBuildAttachArgs(t *testing.T) {
@@ -760,7 +760,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/clint/muxwarp/internal/scanner"
+	"github.com/clintecker/muxwarp/internal/scanner"
 )
 
 // withFakeSSH injects a fake ssh script into PATH for testing.
@@ -894,7 +894,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/clint/muxwarp/internal/ssh"
+	"github.com/clintecker/muxwarp/internal/ssh"
 )
 
 // Session represents a tmux session on a remote host.
@@ -1268,7 +1268,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/sahilm/fuzzy"
 
-	"github.com/clint/muxwarp/internal/scanner"
+	"github.com/clintecker/muxwarp/internal/scanner"
 )
 
 // Messages
@@ -1689,7 +1689,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/clint/muxwarp/internal/tui"
+	"github.com/clintecker/muxwarp/internal/tui"
 )
 
 func TestRenderWarpFrames(t *testing.T) {
@@ -1816,10 +1816,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/clint/muxwarp/internal/config"
-	"github.com/clint/muxwarp/internal/scanner"
-	"github.com/clint/muxwarp/internal/ssh"
-	"github.com/clint/muxwarp/internal/tui"
+	"github.com/clintecker/muxwarp/internal/config"
+	"github.com/clintecker/muxwarp/internal/scanner"
+	"github.com/clintecker/muxwarp/internal/ssh"
+	"github.com/clintecker/muxwarp/internal/tui"
 )
 
 var (

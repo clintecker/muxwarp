@@ -1,5 +1,9 @@
 # muxwarp
 
+[![CI](https://github.com/clintecker/muxwarp/actions/workflows/ci.yml/badge.svg)](https://github.com/clintecker/muxwarp/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/clintecker/muxwarp)](https://goreportcard.com/report/github.com/clintecker/muxwarp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Warp into tmux sessions on remote machines.
 
 muxwarp scans your configured SSH hosts in parallel, finds every running tmux
@@ -7,11 +11,44 @@ session, and presents them in a TUI. Pick one, hit enter, and you're in. No
 session creation, no local tmux management, no SSH config duplication -- just
 fast remote tmux attachment.
 
-## Quick start
+## What it looks like
 
 ```
-go install github.com/clint/muxwarp@latest
+▲ muxwarp ──────────────────────── 2 hosts · 5 sessions
+
+▸  chatalpha     ◇ IDLE  ▪      indigo
+   scenarios     ◇ IDLE  ▪      indigo
+   cjdos         ◆ LIVE  ▪▪     indigo
+   build-farm    ◇ IDLE  ▪▪▪    devbox
+   monitoring    ◆ LIVE  ▪      devbox
+
+↑/↓ navigate │ enter warp │ / filter │ r rescan │ q quit
 ```
+
+## Install
+
+### go install
+
+```
+go install github.com/clintecker/muxwarp/cmd/muxwarp@latest
+```
+
+### From source
+
+```
+git clone https://github.com/clintecker/muxwarp.git
+cd muxwarp
+make build
+```
+
+Binary goes to `bin/muxwarp`.
+
+### Releases
+
+Pre-built binaries for Linux and macOS (amd64/arm64) are available on the
+[releases page](https://github.com/clintecker/muxwarp/releases).
+
+## Quick start
 
 Create `~/.muxwarp.config.yaml`:
 
@@ -27,21 +64,8 @@ Run it:
 muxwarp
 ```
 
-## What it looks like
-
-```
-╭──── muxwarp ────╮    2 hosts · 4 sessions
-│ muxwarp — warp  │
-│   to tmux       │
-╰─────────────────╯
-
-  > [server1] dev            ○ FREE    w3
-    [server1] build-farm     ○ FREE    w2
-    [server2] hacking        ○ FREE    w3
-    [server2] monitoring     ● DOCKED  w1
-
-  ↑/↓ navigate · enter warp · / filter · r rescan · q quit
-```
+That's it. muxwarp scans both hosts, finds every tmux session, and shows them
+in a navigable list. Pick one and press Enter to warp in.
 
 ## Config
 
@@ -68,7 +92,7 @@ defaults:
 hosts:
   - user@server1
   - user@server2
-  - devbox
+  - devbox                   # SSH config aliases work too
 ```
 
 See [`examples/muxwarp.config.yaml`](examples/muxwarp.config.yaml) for an
@@ -84,6 +108,9 @@ muxwarp
 
 Scans all hosts, shows every tmux session in a navigable list. Sessions stream
 in as each host responds -- no waiting for the slowest one.
+
+After ssh exits (e.g. you detach from tmux), you're returned to the TUI with a
+fresh scan. Pick another session or press `q` to quit.
 
 ### Direct warp
 
@@ -130,17 +157,29 @@ characters are highlighted in the list.
 3. Parses results, validates session names, streams them into the TUI
 4. When you pick a session and press Enter, the TUI exits cleanly
 5. A brief warp animation plays
-6. `syscall.Exec` replaces the process with:
-   ```
-   ssh -t <target> -- env TERM=xterm-256color tmux attach-session -t <session>
-   ```
+6. `ssh -t <target> -- env TERM=xterm-256color tmux attach-session -t <session>`
+   runs as a child process
 
-The process replacement means clean TTY handoff -- no orphaned parent, no
-signal forwarding needed. You're just in ssh+tmux.
+After ssh exits, the TUI relaunches with a fresh scan so you can pick another
+session. Single-match direct warp (`muxwarp <name>` with exactly one hit) uses
+`syscall.Exec` for a clean process replacement instead.
 
 Hosts that are down, fail auth (BatchMode=yes), or don't have tmux are silently
 skipped. This is deliberate -- you're scanning known hosts, and missing ones
 just mean fewer sessions in the list.
+
+## Security
+
+muxwarp is careful about what it executes:
+
+- **No shell interpolation** -- SSH commands are constructed as argument arrays
+  passed directly to `execve(2)`. No shell is involved.
+- **Session name validation** -- names from remote hosts are checked against
+  `[A-Za-z0-9._-]` (max 256 chars). Invalid names are silently dropped.
+- **`--` separator** -- prevents session names from being interpreted as SSH
+  flags.
+- **BatchMode=yes** -- scanning uses non-interactive SSH to prevent password
+  prompts from appearing inside the TUI.
 
 ## Requirements
 
@@ -148,31 +187,20 @@ just mean fewer sessions in the list.
 - **ssh** on your local machine (system binary, not a Go library)
 - **tmux** on the remote hosts you're scanning
 
-## Building from source
+## Architecture
 
-### go install
-
-```
-go install github.com/clint/muxwarp@latest
-```
-
-### make
+muxwarp is a single Go binary with four internal packages:
 
 ```
-git clone https://github.com/clint/muxwarp.git
-cd muxwarp
-make build
+cmd/muxwarp/main.go        Entry point, arg parsing, orchestration
+internal/config/            YAML config loading, defaults, validation
+internal/scanner/           Parallel SSH scanning, result parsing
+internal/tui/               Bubble Tea v2 TUI (model, view, update, styles)
+internal/ssh/               SSH argv construction, validation, exec
 ```
 
-Binary goes to `bin/muxwarp`.
-
-### goreleaser
-
-```
-goreleaser release --snapshot --clean
-```
-
-Builds for linux/darwin on amd64/arm64. See `.goreleaser.yml`.
+See [`docs/architecture.md`](docs/architecture.md) for the full technical
+design, data flow diagrams, and design decisions.
 
 ## Contributing
 
@@ -181,8 +209,12 @@ make hooks    # install pre-commit hooks
 make check    # run lint + tests
 ```
 
-See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for the full guide.
+The pre-commit hook enforces formatting, static analysis, linting (cyclomatic
+complexity max 5), tests with race detector, and 70% minimum coverage.
+
+See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) for the full contributor
+guide.
 
 ## License
 
-MIT
+[MIT](LICENSE)

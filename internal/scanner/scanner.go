@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/clint/muxwarp/internal/ssh"
+	"github.com/clintecker/muxwarp/internal/ssh"
 )
 
 // Session represents a single tmux session discovered on a remote host.

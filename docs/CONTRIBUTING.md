@@ -8,7 +8,7 @@
 ## Setup
 
 ```
-git clone https://github.com/clint/muxwarp.git
+git clone https://github.com/clintecker/muxwarp.git
 cd muxwarp
 make hooks    # points git hooks to .githooks/pre-commit
 make build    # builds bin/muxwarp

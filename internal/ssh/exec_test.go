@@ -64,8 +64,8 @@ func TestBuildScanArgs(t *testing.T) {
 	// Must contain target.
 	assertArgContains(t, args, "clint@indigo", "target")
 
-	// Must contain the tmux list-sessions format string.
-	assertArgContains(t, args, "#{session_name}\t#{session_attached}\t#{session_windows}", "tmux format string")
+	// Must contain the tmux list-sessions format string (double-quoted for remote shell).
+	assertArgContains(t, args, "\"#{session_name}\t#{session_attached}\t#{session_windows}\"", "tmux format string")
 }
 
 // assertArgHasSSHOption checks that args contains "-o" followed by the expected option value.

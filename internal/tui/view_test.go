@@ -1,11 +1,15 @@
 package tui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 )
+
+// ansiRE strips ANSI escape sequences for visual position testing.
+var ansiRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func TestView_ReturnsAltScreen(t *testing.T) {
 	m := newTestModel(1)
@@ -190,4 +194,78 @@ func TestRenderHeader_DoneScanning(t *testing.T) {
 	if !strings.Contains(header, "hosts") {
 		t.Errorf("done header should contain 'hosts', got: %q", header)
 	}
+}
+
+func TestComputeColumnWidths(t *testing.T) {
+	m := newTestModelWithSessions()
+
+	cols := m.computeColumnWidths()
+
+	// Sessions: "dev" (3), "build" (5), "staging" (7) — max name = 7
+	if cols.maxName != 7 {
+		t.Errorf("maxName = %d, want 7", cols.maxName)
+	}
+
+	// Windows: dev=1, build=3, staging=2 — max dots = 3 (width=80 >= 60)
+	if cols.maxDots != 3 {
+		t.Errorf("maxDots = %d, want 3", cols.maxDots)
+	}
+}
+
+func TestComputeColumnWidths_NarrowTerminal(t *testing.T) {
+	m := newTestModelWithSessions()
+	m.width = 50 // below 60 threshold
+
+	cols := m.computeColumnWidths()
+
+	if cols.maxDots != 0 {
+		t.Errorf("maxDots should be 0 for narrow terminal, got %d", cols.maxDots)
+	}
+}
+
+func TestColumnAlignment_HostsAligned(t *testing.T) {
+	m := newTestModelWithSessions()
+	m.width = 100
+
+	cols := m.computeColumnWidths()
+
+	// Render all rows, strip ANSI, find host at rune level (not byte level,
+	// since ▪/◇/◆ are multi-byte UTF-8 but 1 visual column each).
+	hostPositions := make(map[int]bool)
+	for i := range m.filtered {
+		row := m.renderRow(i, cols)
+		plain := ansiRE.ReplaceAllString(row, "")
+		host := m.filtered[i].HostShort
+		runes := []rune(plain)
+		hostRunes := []rune(host)
+		pos := runeIndex(runes, hostRunes)
+		if pos == -1 {
+			t.Errorf("row %d missing host %q in plain text: %q", i, host, plain)
+			continue
+		}
+		hostPositions[pos] = true
+	}
+
+	// All hosts should start at the same visual column.
+	if len(hostPositions) > 1 {
+		t.Errorf("hosts not column-aligned, found %d different positions", len(hostPositions))
+	}
+}
+
+// runeIndex finds the last rune-position of needle in haystack.
+func runeIndex(haystack, needle []rune) int {
+	pos := -1
+	for i := 0; i <= len(haystack)-len(needle); i++ {
+		match := true
+		for j := range needle {
+			if haystack[i+j] != needle[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			pos = i
+		}
+	}
+	return pos
 }

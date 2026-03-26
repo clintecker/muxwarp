@@ -36,7 +36,7 @@ func BuildScanArgs(target, timeoutSec string) []string {
 		"-o", "BatchMode=yes",
 		target,
 		"tmux", "list-sessions", "-F",
-		"#{session_name}\t#{session_attached}\t#{session_windows}",
+		"\"#{session_name}\t#{session_attached}\t#{session_windows}\"",
 	}
 }
 
@@ -62,4 +62,22 @@ func ExecReplace(target, term, sessionName string) error {
 
 	// syscall.Exec replaces the process — clean TTY handoff, no orphan.
 	return syscall.Exec(sshPath, argv, os.Environ())
+}
+
+// ExecChild runs ssh as a child process and waits for it to exit.
+// Unlike ExecReplace, this returns when ssh exits, allowing the caller
+// to resume (e.g. re-launch the TUI).
+func ExecChild(target, term, sessionName string) error {
+	sshPath, err := exec.LookPath("ssh")
+	if err != nil {
+		return fmt.Errorf("ssh not found in PATH: %w", err)
+	}
+
+	argv := BuildAttachArgs(target, term, sessionName)
+
+	cmd := exec.Command(sshPath, argv[1:]...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }

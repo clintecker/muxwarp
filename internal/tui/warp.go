@@ -4,28 +4,39 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"time"
 
 	"charm.land/lipgloss/v2"
 )
 
-// WarpFrames generates the 4 animation frames for the warp sequence.
-// Each frame shows a growing block bar that fills available terminal width.
-func WarpFrames(hostShort, sessionName string, termWidth int) []string {
-	label := fmt.Sprintf("engaging jumpgate: %s/%s ", hostShort, sessionName)
-	maxBar := max(termWidth-len(label)-1, 4)
+// Warp label styles.
+var (
+	warpPrefixStyle = lipgloss.NewStyle().Foreground(colorSlate)
+	warpTargetStyle = lipgloss.NewStyle().Foreground(colorCyan).Bold(true)
+	returnStyle     = lipgloss.NewStyle().Foreground(colorLavender)
+)
 
-	barStyle := lipgloss.NewStyle().Foreground(colorCyan)
+// WarpFrames generates the 4 animation frames for the warp sequence.
+// Each frame shows a styled label followed by a gradient block bar.
+func WarpFrames(hostShort, sessionName string, termWidth int) []string {
+	label := warpPrefixStyle.Render("engaging jumpgate: ") +
+		warpTargetStyle.Render(hostShort+"/"+sessionName) + " "
+	labelWidth := lipgloss.Width(label)
+	maxBar := max(termWidth-labelWidth-1, 4)
 
 	frames := make([]string, 4)
 	for i := range 4 {
 		pct := float64(i+1) / 4.0
 		barLen := max(int(pct*float64(maxBar)), 1)
-		bar := barStyle.Render(strings.Repeat("█", barLen))
+		bar := renderGradient(barLen, "█")
 		frames[i] = label + bar
 	}
 	return frames
+}
+
+// ReturnMessage returns a styled "gate closed" message shown after ssh exits.
+func ReturnMessage() string {
+	return returnStyle.Render("⟪ gate closed ⟫")
 }
 
 // PlayWarpAnimation plays the warp animation to stdout.

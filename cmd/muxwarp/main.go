@@ -5,16 +5,15 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/sahilm/fuzzy"
 
-	"github.com/clint/muxwarp/internal/config"
-	"github.com/clint/muxwarp/internal/scanner"
-	"github.com/clint/muxwarp/internal/ssh"
-	"github.com/clint/muxwarp/internal/tui"
+	"github.com/clintecker/muxwarp/internal/config"
+	"github.com/clintecker/muxwarp/internal/scanner"
+	"github.com/clintecker/muxwarp/internal/ssh"
+	"github.com/clintecker/muxwarp/internal/tui"
 )
 
 // Build-time variables set via ldflags.
@@ -47,8 +46,30 @@ func main() {
 	tuiMode(cfg, timeoutSec)
 }
 
-// tuiMode runs the interactive TUI with background scanning.
+// tuiMode runs the interactive TUI in a loop. After warping into an ssh
+// session and returning, the TUI restarts with a fresh scan.
 func tuiMode(cfg *config.Config, timeoutSec string) {
+	for {
+		target, termWidth := runTUIOnce(cfg, timeoutSec)
+		if target == nil {
+			return // user quit
+		}
+
+		tui.PlayWarpAnimation(target.HostShort, target.Name, termWidth)
+
+		if err := ssh.ExecChild(target.Host, cfg.Defaults.Term, target.Name); err != nil {
+			fmt.Fprintf(os.Stderr, "ssh error: %v\n", err)
+		}
+
+		fmt.Println(tui.ReturnMessage())
+		time.Sleep(400 * time.Millisecond)
+		// loop: fresh rescan, new TUI
+	}
+}
+
+// runTUIOnce runs a single TUI session with background scanning. Returns
+// the warp target (nil if the user quit) and the terminal width.
+func runTUIOnce(cfg *config.Config, timeoutSec string) (*tui.Session, int) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	m := tui.NewModel(len(cfg.Hosts))
@@ -70,20 +91,15 @@ func tuiMode(cfg *config.Config, timeoutSec string) {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
-		os.Exit(1)
+		return nil, 80
 	}
 
 	fm, ok := finalModel.(tui.Model)
 	if !ok {
-		return
+		return nil, 80
 	}
 
-	target := fm.WarpTarget()
-	if target == nil {
-		return
-	}
-
-	warp(cfg, target)
+	return fm.WarpTarget(), fm.Width()
 }
 
 // directWarp handles `muxwarp <pattern>` — scan, fuzzy match, then warp.
@@ -111,15 +127,17 @@ func directWarp(cfg *config.Config, timeoutSec, pattern string) {
 		os.Exit(1)
 
 	case 1:
+		// Single match: exec-replace (no list to return to).
 		warp(cfg, &matches[0])
 
 	default:
-		directWarpMultiple(cfg, allSessions, pattern)
+		directWarpMultiple(cfg, allSessions, pattern, timeoutSec)
 	}
 }
 
 // directWarpMultiple runs the TUI pre-filtered when multiple matches are found.
-func directWarpMultiple(cfg *config.Config, allSessions []tui.Session, pattern string) {
+// After the first warp, falls through to the tuiMode loop for reconnection.
+func directWarpMultiple(cfg *config.Config, allSessions []tui.Session, pattern, timeoutSec string) {
 	m := tui.NewModelWithSessions(allSessions, pattern)
 	p := tea.NewProgram(m)
 	finalModel, err := p.Run()
@@ -138,28 +156,28 @@ func directWarpMultiple(cfg *config.Config, allSessions []tui.Session, pattern s
 		return
 	}
 
-	warp(cfg, target)
+	termWidth := fm.Width()
+	tui.PlayWarpAnimation(target.HostShort, target.Name, termWidth)
+
+	if err := ssh.ExecChild(target.Host, cfg.Defaults.Term, target.Name); err != nil {
+		fmt.Fprintf(os.Stderr, "ssh error: %v\n", err)
+	}
+
+	fmt.Println(tui.ReturnMessage())
+	time.Sleep(400 * time.Millisecond)
+
+	// Fall through to tuiMode loop for reconnection.
+	tuiMode(cfg, timeoutSec)
 }
 
 // warp plays the animation and execs into ssh. Never returns on success.
 func warp(cfg *config.Config, target *tui.Session) {
-	playWarpAnimation(target.HostShort, target.Name)
+	tui.PlayWarpAnimation(target.HostShort, target.Name, 80)
 
 	if err := ssh.ExecReplace(target.Host, cfg.Defaults.Term, target.Name); err != nil {
 		fmt.Fprintf(os.Stderr, "exec error: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-// playWarpAnimation prints a short progress bar before exec.
-func playWarpAnimation(hostShort, sessionName string) {
-	label := fmt.Sprintf("engaging jumpgate: %s/%s ", hostShort, sessionName)
-	frames := []int{3, 7, 12, 20}
-	for _, n := range frames {
-		fmt.Printf("\r%s%s", label, strings.Repeat("\u2588", n))
-		time.Sleep(50 * time.Millisecond)
-	}
-	fmt.Println()
 }
 
 // fuzzyMatch runs fuzzy matching of pattern against all sessions.

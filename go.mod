@@ -1,4 +1,4 @@
-module github.com/clint/muxwarp
+module github.com/clintecker/muxwarp
 
 go 1.25.0
 

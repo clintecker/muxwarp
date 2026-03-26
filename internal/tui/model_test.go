@@ -73,9 +73,9 @@ func TestNewModelWithSessions(t *testing.T) {
 	if len(m.filtered) != 2 {
 		t.Errorf("NewModelWithSessions: filtered = %d, want 2", len(m.filtered))
 	}
-	// FREE sessions (Attached==0) should come first after sorting.
+	// IDLE sessions (Attached==0) should come first after sorting.
 	if m.filtered[0].Name != "dev" {
-		t.Errorf("NewModelWithSessions: first filtered should be 'dev' (FREE), got %q", m.filtered[0].Name)
+		t.Errorf("NewModelWithSessions: first filtered should be 'dev' (IDLE), got %q", m.filtered[0].Name)
 	}
 }
 
@@ -140,7 +140,7 @@ func TestSortSessions(t *testing.T) {
 
 	sortSessions(sessions)
 
-	// Expected order: FREE first (sorted by host, name), then DOCKED (sorted by host, name).
+	// Expected order: IDLE first (sorted by host, name), then LIVE (sorted by host, name).
 	expected := []struct {
 		host string
 		name string
@@ -180,10 +180,10 @@ func TestWarpTargetNilByDefault(t *testing.T) {
 func TestVisibleRows(t *testing.T) {
 	m := NewModel(1)
 	m.height = 30
-	// overhead is 6 (header 4 + footer 2), so visible = 30-6 = 24
+	// overhead is 4 (header 2 + footer 2), so visible = 30-4 = 26
 	got := m.visibleRows()
-	if got != 24 {
-		t.Errorf("visibleRows() = %d, want 24 (height=30, overhead=6)", got)
+	if got != 26 {
+		t.Errorf("visibleRows() = %d, want 26 (height=30, overhead=4)", got)
 	}
 
 	// Very small terminal: should clamp to 1.

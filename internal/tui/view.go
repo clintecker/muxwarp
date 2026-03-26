@@ -36,9 +36,10 @@ func (m Model) View() tea.View {
 	return v
 }
 
-// renderHeader builds the header with the muxwarp box and status.
+// renderHeader builds the header: ▲ muxwarp ──gradient── status
 func (m Model) renderHeader() string {
-	box := headerBoxStyle.Render("muxwarp — warp to tmux")
+	triangle := headerTriangleStyle.Render("▲")
+	title := headerTitleStyle.Render(" muxwarp ")
 
 	var status string
 	if m.scanning {
@@ -48,16 +49,48 @@ func (m Model) renderHeader() string {
 	} else {
 		hosts := m.countHosts()
 		sessions := len(m.sessions)
-		status = statusStyle.Render(fmt.Sprintf("%d hosts · %d sessions",
-			hosts, sessions))
+		status = statusStyle.Render(fmt.Sprintf("%s · %s",
+			pluralize(hosts, "host"), pluralize(sessions, "session")))
 	}
 
-	// Place box on left, status on right.
-	boxWidth := lipgloss.Width(box)
+	// Build gradient rule to fill between title and status.
+	leftWidth := lipgloss.Width(triangle) + lipgloss.Width(title)
 	statusWidth := lipgloss.Width(status)
-	gap := max(m.width-boxWidth-statusWidth, 2)
+	ruleWidth := m.width - leftWidth - statusWidth - 2 // 2 for spacing
+	if ruleWidth < 3 {
+		ruleWidth = 3
+	}
 
-	return box + strings.Repeat(" ", gap) + status
+	rule := renderGradientRule(ruleWidth)
+
+	return triangle + title + rule + " " + status
+}
+
+// pluralize returns "1 host" or "N hosts".
+func pluralize(n int, singular string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, singular)
+	}
+	return fmt.Sprintf("%d %ss", n, singular)
+}
+
+// renderGradient generates a string of repeated char with a neon-blue→electric-purple gradient.
+func renderGradient(width int, char string) string {
+	if width <= 0 {
+		return ""
+	}
+	colors := lipgloss.Blend1D(width, colorNeonBlue, colorElectricPurple)
+	var b strings.Builder
+	for _, c := range colors {
+		style := lipgloss.NewStyle().Foreground(c)
+		b.WriteString(style.Render(char))
+	}
+	return b.String()
+}
+
+// renderGradientRule generates a string of ─ characters with a cyan→purple gradient.
+func renderGradientRule(width int) string {
+	return renderGradient(width, "─")
 }
 
 // countHosts returns the number of unique hosts in the session list.
@@ -69,9 +102,31 @@ func (m Model) countHosts() int {
 	return len(seen)
 }
 
+// columnWidths holds computed column widths for aligned row rendering.
+type columnWidths struct {
+	maxName int // max session name length across visible sessions
+	maxDots int // max window count across visible sessions (0 if width < 60)
+}
+
+// computeColumnWidths computes the max name length and max dot count
+// across all filtered sessions for column alignment.
+func (m Model) computeColumnWidths() columnWidths {
+	var cols columnWidths
+	for _, s := range m.filtered {
+		if len(s.Name) > cols.maxName {
+			cols.maxName = len(s.Name)
+		}
+		if m.width >= 60 && s.Windows > cols.maxDots {
+			cols.maxDots = s.Windows
+		}
+	}
+	return cols
+}
+
 // renderList builds the scrolling session list.
 func (m Model) renderList() string {
 	visible := m.visibleRows()
+	cols := m.computeColumnWidths()
 	var b strings.Builder
 
 	end := min(m.viewOffset+visible, len(m.filtered))
@@ -80,7 +135,7 @@ func (m Model) renderList() string {
 		if i > m.viewOffset {
 			b.WriteRune('\n')
 		}
-		b.WriteString(m.renderRow(i))
+		b.WriteString(m.renderRow(i, cols))
 	}
 
 	// Pad remaining rows if the list is shorter than the viewport.
@@ -93,39 +148,46 @@ func (m Model) renderList() string {
 	return b.String()
 }
 
-// maxHostWidth returns the width of the longest HostShort in the filtered list.
-func (m Model) maxHostWidth() int {
-	w := 0
-	for _, s := range m.filtered {
-		w = max(w, len(s.HostShort))
-	}
-	return w
-}
-
-// renderRow renders a single session row with adaptive column layout.
+// renderRow renders a single session row with column-aligned layout.
 //
-// Width >= 80: selector [host] session  ● DOCKED  wN
-// Width >= 60: selector [host] session  ●  wN      (badge text drops)
-// Width >= 45: selector [host] session  ●          (window count drops)
-// Width <  45: selector hos session  ●              (brackets drop, 3-char host)
-func (m Model) renderRow(idx int) string {
+// Columns are padded so names, badges, dots, and hosts align vertically:
+//   ▸  name(padded)  ◇ IDLE  ▪▪(padded)   host
+func (m Model) renderRow(idx int, cols columnWidths) string {
 	s := m.filtered[idx]
 	selected := idx == m.cursor
 
 	sel := renderSelector(selected)
-	host := m.renderHostColumn(s, m.width)
 	name := m.renderSessionName(s)
 	badge := renderBadge(s, m.width)
-	wins := renderWindows(s, m.width)
+	dots := renderWindows(s, m.width)
+	host := m.renderHostTag(s, m.width)
 
-	row := composeRow(sel, host, name, badge, wins)
-	return applyRowSelection(row, selected, m.width)
+	// Pad session name to align badge column.
+	namePad := cols.maxName - len(s.Name)
+	if namePad > 0 {
+		name += strings.Repeat(" ", namePad)
+	}
+
+	// Pad dots to align host column.
+	dotCount := 0
+	if m.width >= 60 {
+		dotCount = s.Windows
+	}
+	dotPad := cols.maxDots - dotCount
+	if dotPad > 0 {
+		dots += strings.Repeat(" ", dotPad)
+	}
+
+	// Build left content: selector + name + badge + dots
+	left := composLeftContent(sel, name, badge, dots)
+
+	return applyRowSelection(left, host, selected, m.width)
 }
 
 // renderSelector returns the cursor indicator for a row.
 func renderSelector(selected bool) string {
 	if selected {
-		return selectorStyle.Render("> ")
+		return selectorStyle.Render("▸ ")
 	}
 	return "  "
 }
@@ -138,40 +200,55 @@ func renderBadge(s Session, termWidth int) string {
 	return renderCompactBadge(s)
 }
 
-// renderFullBadge returns a badge with dot and text label.
+// renderFullBadge returns a badge with diamond symbol and text label.
 func renderFullBadge(s Session) string {
 	if s.Attached == 0 {
-		return freeBadgeStyle.Render("○ FREE")
+		return idleBadgeStyle.Render("◇ IDLE")
 	}
-	return dockedBadgeStyle.Render("● DOCKED")
+	return liveBadgeStyle.Render("◆ LIVE")
 }
 
-// renderCompactBadge returns a dot-only badge.
+// renderCompactBadge returns a diamond-only badge.
 func renderCompactBadge(s Session) string {
 	if s.Attached == 0 {
-		return freeBadgeStyle.Render("○")
+		return idleBadgeStyle.Render("◇")
 	}
-	return dockedBadgeStyle.Render("●")
+	return liveBadgeStyle.Render("◆")
 }
 
-// renderWindows returns the window count string, or empty below width 60.
+// renderWindows returns window dots (▪), or empty below width 60.
 func renderWindows(s Session, termWidth int) string {
-	if termWidth >= 60 {
-		return windowStyle.Render(fmt.Sprintf("w%d", s.Windows))
+	if termWidth < 60 || s.Windows == 0 {
+		return ""
 	}
-	return ""
+	return windowDotStyle.Render(strings.Repeat("▪", s.Windows))
 }
 
-// composeRow joins the columns into a single row string.
-func composeRow(sel, host, name, badge, wins string) string {
-	if wins != "" {
-		return fmt.Sprintf("%s %s %s  %s  %s", sel, host, name, badge, wins)
+// composLeftContent joins selector, name, badge, and dots.
+func composLeftContent(sel, name, badge, dots string) string {
+	if dots != "" {
+		return fmt.Sprintf("%s %s  %s  %s", sel, name, badge, dots)
 	}
-	return fmt.Sprintf("%s %s %s  %s", sel, host, name, badge)
+	return fmt.Sprintf("%s %s  %s", sel, name, badge)
 }
 
-// applyRowSelection pads and highlights the row if it is selected.
-func applyRowSelection(row string, selected bool, width int) string {
+// renderHostTag renders the host as a dim right-aligned tag.
+func (m Model) renderHostTag(s Session, termWidth int) string {
+	hostText := s.HostShort
+	hostMatchSet := m.hostMatchSet(s)
+
+	if termWidth < 45 && len(hostText) > 3 {
+		hostText = hostText[:3]
+	}
+
+	return renderHighlightedString(hostText, hostMatchSet, hostStyle, matchHighlightStyle)
+}
+
+// applyRowSelection joins left content and host with a fixed 3-space gap,
+// and highlights the full row if selected.
+func applyRowSelection(left, host string, selected bool, width int) string {
+	row := left + "   " + host
+
 	if !selected {
 		return row
 	}
@@ -180,17 +257,6 @@ func applyRowSelection(row string, selected bool, width int) string {
 		row += strings.Repeat(" ", width-rowWidth)
 	}
 	return selectedRowStyle.Render(row)
-}
-
-// renderHostColumn renders the host label with adaptive width and fuzzy highlights.
-func (m Model) renderHostColumn(s Session, termWidth int) string {
-	hostText := s.HostShort
-	hostMatchSet := m.hostMatchSet(s)
-
-	if termWidth < 45 {
-		return renderNarrowHost(hostText, hostMatchSet)
-	}
-	return renderBracketedHost(hostText, hostMatchSet, m.maxHostWidth())
 }
 
 // hostMatchSet returns the set of character positions in the host that
@@ -204,26 +270,6 @@ func (m Model) hostMatchSet(s Session) map[int]bool {
 		}
 	}
 	return set
-}
-
-// renderNarrowHost renders a 3-char prefix host without brackets.
-func renderNarrowHost(hostText string, matchSet map[int]bool) string {
-	if len(hostText) > 3 {
-		hostText = hostText[:3]
-	}
-	return renderHighlightedString(hostText, matchSet, hostStyle, matchHighlightStyle)
-}
-
-// renderBracketedHost renders "[host]" padded to hostW width.
-func renderBracketedHost(hostText string, matchSet map[int]bool, hostW int) string {
-	var b strings.Builder
-	b.WriteString(hostStyle.Render("["))
-	b.WriteString(renderHighlightedString(hostText, matchSet, hostStyle, matchHighlightStyle))
-	if pad := hostW - len(hostText); pad > 0 {
-		b.WriteString(strings.Repeat(" ", pad))
-	}
-	b.WriteString(hostStyle.Render("]"))
-	return b.String()
 }
 
 // renderHighlightedString renders a string with certain character positions highlighted.
@@ -282,7 +328,7 @@ func (m Model) renderFooter() string {
 		filterLine := prompt + input + cursor
 
 		// Help line.
-		help := footerStyle.Render("type to filter · enter warp · esc clear")
+		help := footerStyle.Render("type to filter │ enter warp │ esc clear")
 
 		// Right-align the match count.
 		filterWidth := lipgloss.Width(filterLine)
@@ -293,10 +339,10 @@ func (m Model) renderFooter() string {
 	}
 
 	if len(m.sessions) == 0 {
-		return footerStyle.Render("r rescan · q quit")
+		return footerStyle.Render("r rescan │ q quit")
 	}
 
-	return footerStyle.Render("↑/↓ navigate · enter warp · / filter · r rescan · q quit")
+	return footerStyle.Render("↑/↓ navigate │ enter warp │ / filter │ r rescan │ q quit")
 }
 
 // renderEmpty renders the empty state when no sessions are found.

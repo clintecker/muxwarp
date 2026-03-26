@@ -76,3 +76,14 @@ func TestPlayWarpAnimationTo(t *testing.T) {
 		t.Error("output should end with newline")
 	}
 }
+
+func TestReturnMessage(t *testing.T) {
+	msg := ReturnMessage()
+
+	if !strings.Contains(msg, "gate closed") {
+		t.Errorf("ReturnMessage should contain 'gate closed', got: %q", msg)
+	}
+	if !strings.Contains(msg, "⟪") || !strings.Contains(msg, "⟫") {
+		t.Errorf("ReturnMessage should contain bracket decorations, got: %q", msg)
+	}
+}

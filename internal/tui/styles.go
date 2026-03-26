@@ -9,24 +9,29 @@ import (
 
 // Color palette.
 var (
-	colorCyan     = lipgloss.Color("#8BE9FD")
-	colorLavender = lipgloss.Color("#BD93F9")
-	colorGreen    = lipgloss.Color("#2EE6A6")
-	colorRed      = lipgloss.Color("#FF5555")
-	colorSlate    = lipgloss.Color("#6B7280")
-	colorText     = lipgloss.Color("#E6E6E6")
-	colorDimBg    = lipgloss.Color("#1E1E2E")
+	colorCyan           = lipgloss.Color("#8BE9FD")
+	colorLavender       = lipgloss.Color("#BD93F9")
+	colorGreen          = lipgloss.Color("#2EE6A6")
+	colorRed            = lipgloss.Color("#FF5555")
+	colorSlate          = lipgloss.Color("#6B7280")
+	colorText           = lipgloss.Color("#E6E6E6")
+	colorDimBg          = lipgloss.Color("#1E1E2E")
+	colorNeonBlue       = lipgloss.Color("#00D9FF")
+	colorElectricPurple = lipgloss.Color("#C891FF")
+	colorDimHost        = lipgloss.Color("#4A4A5E")
 )
 
 // Re-usable styles.
 var (
-	// Header box style.
-	headerBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorLavender).
-			Foreground(colorLavender).
-			Padding(0, 1).
-			Bold(true)
+	// Header triangle (▲) style.
+	headerTriangleStyle = lipgloss.NewStyle().
+				Foreground(colorLavender).
+				Bold(true)
+
+	// Header title ("muxwarp") style.
+	headerTitleStyle = lipgloss.NewStyle().
+				Foreground(colorCyan).
+				Bold(true)
 
 	// Status text (right side of header).
 	statusStyle = lipgloss.NewStyle().
@@ -47,26 +52,26 @@ var (
 			Foreground(colorCyan).
 			Bold(true)
 
-	// Host label in brackets.
+	// Host tag (column-aligned, lavender).
 	hostStyle = lipgloss.NewStyle().
-			Foreground(colorSlate)
+			Foreground(colorLavender)
 
 	// Session name.
 	sessionNameStyle = lipgloss.NewStyle().
 				Foreground(colorText)
 
-	// FREE badge.
-	freeBadgeStyle = lipgloss.NewStyle().
+	// IDLE badge (detached session).
+	idleBadgeStyle = lipgloss.NewStyle().
 			Foreground(colorCyan).
 			Bold(true)
 
-	// DOCKED badge.
-	dockedBadgeStyle = lipgloss.NewStyle().
-				Foreground(colorGreen).
-				Bold(true)
+	// LIVE badge (attached session).
+	liveBadgeStyle = lipgloss.NewStyle().
+			Foreground(colorGreen).
+			Bold(true)
 
-	// Window count.
-	windowStyle = lipgloss.NewStyle().
+	// Window dot (▪) style.
+	windowDotStyle = lipgloss.NewStyle().
 			Foreground(colorSlate)
 
 	// Footer help text.
@@ -105,4 +110,7 @@ var (
 	_ color.Color = colorSlate
 	_ color.Color = colorText
 	_ color.Color = colorDimBg
+	_ color.Color = colorNeonBlue
+	_ color.Color = colorElectricPurple
+	_ color.Color = colorDimHost
 )

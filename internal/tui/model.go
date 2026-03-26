@@ -93,13 +93,17 @@ func (m Model) WarpTarget() *Session {
 	return m.warpTarget
 }
 
-// sortSessions sorts sessions: FREE (Attached==0) first, then DOCKED,
+// Width returns the current terminal width. Used by main.go for warp
+// animation after the TUI exits.
+func (m Model) Width() int { return m.width }
+
+// sortSessions sorts sessions: IDLE (Attached==0) first, then LIVE,
 // then alphabetically by host then name within each group.
 func sortSessions(sessions []Session) {
 	slices.SortFunc(sessions, sessionLess)
 }
 
-// sessionLess compares two sessions for sorting: FREE before DOCKED,
+// sessionLess compares two sessions for sorting: IDLE before LIVE,
 // then alphabetical by host, then by name.
 func sessionLess(a, b Session) int {
 	if c := cmp.Compare(attachedRank(a), attachedRank(b)); c != 0 {
@@ -111,7 +115,7 @@ func sessionLess(a, b Session) int {
 	return cmp.Compare(a.Name, b.Name)
 }
 
-// attachedRank returns 0 for FREE sessions and 1 for DOCKED, so FREE sorts first.
+// attachedRank returns 0 for IDLE sessions and 1 for LIVE, so IDLE sorts first.
 func attachedRank(s Session) int {
 	if s.Attached == 0 {
 		return 0
@@ -120,10 +124,10 @@ func attachedRank(s Session) int {
 }
 
 // visibleRows returns the number of session rows that fit on screen,
-// accounting for header (4 lines) and footer (2 lines).
+// accounting for header (1 line + 1 blank) and footer (1 blank + 1 help).
 func (m Model) visibleRows() int {
-	// header: 3 lines (box) + 1 blank line = 4
+	// header: 1 line (rule) + 1 blank line = 2
 	// footer: 1 blank line + 1 help line = 2
-	overhead := 6
+	overhead := 4
 	return max(m.height-overhead, 1)
 }

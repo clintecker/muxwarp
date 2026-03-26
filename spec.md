@@ -11,7 +11,7 @@ No session creation. No local tmux management. No SSH config duplication. Just f
 ## Install
 
 ```
-go install github.com/clint/muxwarp@latest
+go install github.com/clintecker/muxwarp@latest
 ```
 
 Single static binary. No runtime dependencies beyond `ssh` on your machine and `tmux` on the remote hosts.
@@ -75,57 +75,54 @@ No env var overrides, no XDG, no merging. One file, one location.
 ### Layout
 
 ```
-╭──── muxwarp ────╮    Spooling drives… 3/5
-│ ✦ warp to tmux  │
-╰─────────────────╯
+▲ muxwarp ─────────────────────────────────── 2 hosts · 4 sessions
 
-  > [indigo ] cjdos          ○ FREE    w5
-    [indigo ] build-farm     ○ FREE    w2
-    [devboi ] hacking        ○ FREE    w3
-    [devboi ] monitoring     ● DOCKED  w1
+▸  cjdos          ◇ IDLE  ▪▪▪▪▪                           indigo
+   build-farm     ◇ IDLE  ▪▪                               indigo
+   hacking        ◇ IDLE  ▪▪▪                              devboi
+   monitoring     ◆ LIVE  ▪                                devboi
 
-  ↑/↓ navigate • enter warp • / filter • r rescan • q quit
+↑/↓ navigate │ enter warp │ / filter │ r rescan │ q quit
 ```
 
 ### Header
 
-A small banner with Lip Gloss rounded border, max 3 lines. Cyan-to-lavender gradient on the border. Right-aligned status:
+A single-line header: `▲ muxwarp ──gradient── status`. The `─` rule uses a neon-blue-to-electric-purple gradient. Right-aligned status:
 
-- While scanning: spinner + `Spooling drives… {done}/{total}`
-- After scan: `{N} hosts · {N} sessions`
-
-On terminals narrower than 40 cols, collapses to a single line: `muxwarp — {N} hosts · {N} sessions`
+- While scanning: `Spooling drives… {done}/{total}`
+- After scan: `{N} host(s) · {N} session(s)` (properly pluralized)
 
 ### Session list
 
 A single flat list. Every session from every host, interleaved. Each row:
 
 ```
-{selector} [{host}] {session}  {badge}  w{windows}
+{selector} {session}  {badge}  {dots}  ···padding···  {host}
 ```
 
-- **selector**: `>` (bright cyan) or blank
-- **host**: short name extracted from the SSH target (e.g., `clint@indigo` -> `indigo`), right-padded to widest host for alignment. Color: lavender
-- **session**: tmux session name, left-aligned, truncated with ellipsis if needed. Color: light text
+- **selector**: `▸` (bright cyan) or blank
+- **session**: tmux session name, left-aligned. Color: light text
 - **badge**:
-  - `● DOCKED` (green) — session has attached clients
-  - `○ FREE` (cyan) — session is detached
-- **windows**: `w{N}` — window count, right-aligned to 3 chars, dim
+  - `◆ LIVE` (green) — session has attached clients
+  - `◇ IDLE` (cyan) — session is detached
+- **dots**: `▪` repeated per window count. Color: dim slate
+- **host**: short name extracted from the SSH target (e.g., `clint@indigo` -> `indigo`), right-aligned, very dim. Color: #4A4A5E with faint
 
-The selected row gets a subtle background tint and a left-edge accent bar matching the badge color (cyan for FREE, green for DOCKED).
+The selected row gets a subtle background tint.
 
 ### Adaptive column layout
 
-As terminal width shrinks, columns hide in this order:
-1. `DOCKED`/`FREE` labels collapse to just `●`/`○`
-2. Window count `wN` hides
-3. Session name truncates with ellipsis
-4. Host brackets drop, showing just a 3-char prefix
+As terminal width shrinks, columns adapt:
+
+- Width >= 80: `▸  name  ◇ IDLE  ▪▪  ···padding···  host`
+- Width >= 60: `▸  name  ◇  ▪▪  ···padding···  host` (badge text drops)
+- Width >= 45: `▸  name  ◇  ···padding···  host` (dots drop)
+- Width < 45: `▸  name  ◇  ···padding···  hos` (host truncates to 3 chars)
 
 ### Sorting
 
-1. FREE (detached) sessions first — these are the ones you probably want
-2. Then DOCKED (attached)
+1. IDLE (detached) sessions first — these are the ones you probably want
+2. Then LIVE (attached)
 3. Within each group: alphabetical by host, then session name
 
 ### Filter mode
@@ -137,8 +134,9 @@ Press `Esc` to clear filter, `Enter` to warp into selected match.
 ### Footer
 
 Single line, dim, context-sensitive:
-- **Normal**: `↑/↓ navigate · enter warp · / filter · r rescan · q quit`
-- **Filtering**: `type to filter · enter warp · esc clear · 3 matches`
+- **Normal**: `↑/↓ navigate │ enter warp │ / filter │ r rescan │ q quit`
+- **Filtering**: `type to filter │ enter warp │ esc clear` + right-aligned match count
+- **Empty**: `r rescan │ q quit`
 
 ### Color palette
 
@@ -278,15 +276,13 @@ Using the system `ssh` binary (not Go's `crypto/ssh`) means:
 When all hosts return zero sessions:
 
 ```
-╭──── muxwarp ────╮    2 hosts · 0 sessions
-│ ✦ warp to tmux  │
-╰─────────────────╯
+▲ muxwarp ─────────────────────────────────── 2 hosts · 0 sessions
 
-      All gates are calm — no active lanes detected.
+All gates are calm — no active lanes detected.
 
-      Start a session:  ssh <host> -t tmux new -s <name>
+Start a session:  ssh <host> -t tmux new -s <name>
 
-      r rescan · q quit
+r rescan │ q quit
 ```
 
 ## Architecture

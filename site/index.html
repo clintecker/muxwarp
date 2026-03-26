@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>muxwarp — warp into tmux sessions on remote machines</title>
+  <meta name="description" content="A fast TUI tool that scans your SSH hosts, discovers tmux sessions, and warps you in with a single keystroke.">
+  <meta property="og:title" content="muxwarp">
+  <meta property="og:description" content="Warp into tmux sessions on remote machines.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▲</text></svg>">
+  <style>
+    :root {
+      --bg: #0e0e14;
+      --bg-card: #16161e;
+      --bg-code: #1e1e2e;
+      --cyan: #8be9fd;
+      --lavender: #bd93f9;
+      --green: #2ee6a6;
+      --red: #ff5555;
+      --slate: #6b7280;
+      --text: #e6e6e6;
+      --text-dim: #9ca3af;
+      --neon-blue: #00d9ff;
+      --electric-purple: #c891ff;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header */
+    header {
+      padding: 20px 0;
+      border-bottom: 1px solid #1e1e2e;
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--text);
+    }
+
+    .logo-triangle {
+      color: var(--lavender);
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
+
+    .logo-text {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--cyan);
+      letter-spacing: 0.5px;
+    }
+
+    .header-links {
+      display: flex;
+      gap: 24px;
+    }
+
+    .header-links a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.2s;
+    }
+
+    .header-links a:hover { color: var(--cyan); }
+
+    /* Hero */
+    .hero {
+      padding: 100px 0 80px;
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-size: 3.2rem;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, var(--neon-blue), var(--electric-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero .subtitle {
+      font-size: 1.3rem;
+      color: var(--text-dim);
+      max-width: 540px;
+      margin: 0 auto 40px;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--neon-blue), var(--electric-purple));
+      color: #0e0e14;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(0, 217, 255, 0.25);
+    }
+
+    .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text);
+      border: 1px solid #2a2a3a;
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--lavender);
+      background: #1a1a24;
+    }
+
+    /* Terminal demo */
+    .terminal-wrap {
+      margin: 60px auto 0;
+      max-width: 700px;
+    }
+
+    .terminal {
+      background: var(--bg-code);
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #2a2a3a;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      line-height: 1.7;
+    }
+
+    .terminal-bar {
+      background: #1a1a24;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .terminal-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .terminal-dot.red { background: var(--red); }
+    .terminal-dot.yellow { background: #f1fa8c; }
+    .terminal-dot.green { background: var(--green); }
+
+    .terminal-body {
+      padding: 20px 24px;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .t-lavender { color: var(--lavender); }
+    .t-cyan { color: var(--cyan); }
+    .t-green { color: var(--green); }
+    .t-slate { color: var(--slate); }
+    .t-text { color: var(--text); }
+    .t-bold { font-weight: 700; }
+    .t-dim { color: #4a4a5e; }
+    .t-gradient {
+      background: linear-gradient(90deg, var(--neon-blue), var(--electric-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Install snippet */
+    .install-box {
+      margin: 48px auto 0;
+      max-width: 480px;
+    }
+
+    .install-cmd {
+      background: var(--bg-code);
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 14px 20px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .install-cmd code {
+      color: var(--text);
+    }
+
+    .install-cmd .prompt { color: var(--cyan); }
+
+    .copy-btn {
+      background: none;
+      border: 1px solid #2a2a3a;
+      color: var(--text-dim);
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    /* Features */
+    .features {
+      padding: 100px 0;
+    }
+
+    .features h2 {
+      text-align: center;
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .features .section-sub {
+      text-align: center;
+      color: var(--text-dim);
+      margin-bottom: 56px;
+      font-size: 1.05rem;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 24px;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid #1e1e2e;
+      border-radius: 10px;
+      padding: 28px;
+      transition: border-color 0.2s;
+    }
+
+    .feature-card:hover {
+      border-color: #2a2a3a;
+    }
+
+    .feature-icon {
+      font-size: 1.8rem;
+      margin-bottom: 12px;
+    }
+
+    .feature-card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+
+    .feature-card p {
+      font-size: 0.9rem;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    /* How it works */
+    .how-it-works {
+      padding: 0 0 100px;
+    }
+
+    .how-it-works h2 {
+      text-align: center;
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 48px;
+    }
+
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .step {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+
+    .step-num {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--neon-blue), var(--electric-purple));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: #0e0e14;
+    }
+
+    .step-content h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .step-content p {
+      color: var(--text-dim);
+      font-size: 0.9rem;
+    }
+
+    .step-content code {
+      background: var(--bg-code);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 0.85rem;
+      color: var(--cyan);
+    }
+
+    /* Config section */
+    .config-section {
+      padding: 0 0 100px;
+    }
+
+    .config-section h2 {
+      text-align: center;
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .config-section .section-sub {
+      text-align: center;
+      color: var(--text-dim);
+      margin-bottom: 40px;
+      font-size: 1.05rem;
+    }
+
+    .config-example {
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    .config-example pre {
+      background: var(--bg-code);
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 20px 24px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      overflow-x: auto;
+    }
+
+    .config-example .comment { color: var(--slate); }
+    .config-example .key { color: var(--cyan); }
+    .config-example .value { color: var(--green); }
+
+    /* Keybindings */
+    .keybindings {
+      padding: 0 0 100px;
+    }
+
+    .keybindings h2 {
+      text-align: center;
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 40px;
+    }
+
+    .keys-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .key-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: var(--bg-card);
+      border-radius: 8px;
+      border: 1px solid #1e1e2e;
+    }
+
+    .key-item kbd {
+      background: var(--bg-code);
+      border: 1px solid #2a2a3a;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      color: var(--cyan);
+      min-width: 40px;
+      text-align: center;
+    }
+
+    .key-item span {
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid #1e1e2e;
+      padding: 40px 0;
+      text-align: center;
+    }
+
+    footer p {
+      color: var(--slate);
+      font-size: 0.85rem;
+    }
+
+    footer a {
+      color: var(--lavender);
+      text-decoration: none;
+    }
+
+    footer a:hover { text-decoration: underline; }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 2.2rem; }
+      .hero .subtitle { font-size: 1.1rem; }
+      .terminal-body { font-size: 0.72rem; padding: 14px 16px; }
+      .header-links { gap: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container header-inner">
+      <a class="logo" href="#">
+        <span class="logo-triangle">▲</span>
+        <span class="logo-text">muxwarp</span>
+      </a>
+      <nav class="header-links">
+        <a href="https://github.com/clintecker/muxwarp">GitHub</a>
+        <a href="https://github.com/clintecker/muxwarp/blob/main/docs/architecture.md">Docs</a>
+        <a href="https://github.com/clintecker/muxwarp/blob/main/docs/CONTRIBUTING.md">Contributing</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container">
+        <h1>muxwarp</h1>
+        <p class="subtitle">
+          Scan your SSH hosts. Find every tmux session. Warp in with one keystroke.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="https://github.com/clintecker/muxwarp">View on GitHub</a>
+          <a class="btn btn-secondary" href="https://github.com/clintecker/muxwarp/releases">Download</a>
+        </div>
+
+        <div class="terminal-wrap">
+          <div class="terminal">
+            <div class="terminal-bar">
+              <div class="terminal-dot red"></div>
+              <div class="terminal-dot yellow"></div>
+              <div class="terminal-dot green"></div>
+            </div>
+            <div class="terminal-body"><span class="t-lavender t-bold">▲</span> <span class="t-cyan t-bold">muxwarp</span> <span class="t-gradient">────────────────────────</span> <span class="t-slate">2 hosts · 5 sessions</span>
+
+<span class="t-cyan t-bold">▸</span>  <span class="t-text t-bold">chatalpha</span>     <span class="t-cyan t-bold">◇ IDLE</span>  <span class="t-slate">▪</span>      <span class="t-lavender">indigo</span>
+   <span class="t-text">scenarios</span>     <span class="t-cyan">◇ IDLE</span>  <span class="t-slate">▪</span>      <span class="t-lavender">indigo</span>
+   <span class="t-text">cjdos</span>         <span class="t-green">◆ LIVE</span>  <span class="t-slate">▪▪</span>     <span class="t-lavender">indigo</span>
+   <span class="t-text">build-farm</span>    <span class="t-cyan">◇ IDLE</span>  <span class="t-slate">▪▪▪</span>    <span class="t-lavender">devbox</span>
+   <span class="t-text">monitoring</span>    <span class="t-green">◆ LIVE</span>  <span class="t-slate">▪</span>      <span class="t-lavender">devbox</span>
+
+<span class="t-slate">↑/↓ navigate │ enter warp │ / filter │ r rescan │ q quit</span></div>
+          </div>
+        </div>
+
+        <div class="install-box">
+          <div class="install-cmd">
+            <code><span class="prompt">$</span> go install github.com/clintecker/muxwarp/cmd/muxwarp@latest</code>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText('go install github.com/clintecker/muxwarp/cmd/muxwarp@latest')">Copy</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="features">
+      <div class="container">
+        <h2>Why muxwarp</h2>
+        <p class="section-sub">No config duplication. No session creation. Just fast remote tmux attachment.</p>
+        <div class="feature-grid">
+          <div class="feature-card">
+            <div class="feature-icon">&#9889;</div>
+            <h3>Parallel scanning</h3>
+            <p>All hosts are scanned concurrently. Sessions stream into the TUI as each host responds &mdash; no waiting for the slowest one.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">&#128270;</div>
+            <h3>Fuzzy filter</h3>
+            <p>Press <code>/</code> and start typing. Fuzzy matching across host and session names with character-level highlighting.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">&#128274;</div>
+            <h3>Secure by design</h3>
+            <p>No shell interpolation in SSH commands. Session names validated against strict allowlist. Args passed directly to execve.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">&#128268;</div>
+            <h3>Uses your ssh</h3>
+            <p>Calls your system ssh binary directly. All your SSH config, agent forwarding, ProxyCommand, FIDO keys &mdash; everything works.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">&#9851;</div>
+            <h3>Reconnection loop</h3>
+            <p>After ssh exits, you're back in the TUI with a fresh scan. Detach from tmux and pick another session instantly.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">&#127912;</div>
+            <h3>Retro-futurism TUI</h3>
+            <p>Neon gradient header, column-aligned sessions, warp animation with color gradient bar. Built on Bubble Tea v2.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="how-it-works">
+      <div class="container">
+        <h2>How it works</h2>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <h3>Configure your hosts</h3>
+              <p>List your SSH targets in <code>~/.muxwarp.config.yaml</code>. Same strings you'd pass to <code>ssh</code>.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <h3>Scan in parallel</h3>
+              <p>muxwarp runs <code>ssh ... tmux list-sessions</code> on every host concurrently. Results stream in as each host responds.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <h3>Pick a session</h3>
+              <p>Navigate the list, use fuzzy filter to search, or run <code>muxwarp &lt;name&gt;</code> to jump straight in.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <h3>Warp</h3>
+              <p>A brief animation plays, then your process is replaced with <code>ssh -t host -- tmux attach</code>. Clean TTY handoff, no orphaned parent.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="config-section">
+      <div class="container">
+        <h2>Simple config</h2>
+        <p class="section-sub">One file. No env vars, no XDG, no merging.</p>
+        <div class="config-example">
+          <pre><span class="comment"># ~/.muxwarp.config.yaml</span>
+<span class="key">defaults:</span>
+  <span class="key">timeout:</span> <span class="value">3s</span>               <span class="comment"># per-host SSH timeout</span>
+  <span class="key">term:</span> <span class="value">xterm-256color</span>    <span class="comment"># TERM on attach</span>
+
+<span class="key">hosts:</span>
+  - <span class="value">clint@indigo</span>
+  - <span class="value">clint@devbox</span>
+  - <span class="value">deploy-host</span>           <span class="comment"># SSH config aliases work</span></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="keybindings">
+      <div class="container">
+        <h2>Keybindings</h2>
+        <div class="keys-grid">
+          <div class="key-item"><kbd>&#8593;/k</kbd> <span>Move up</span></div>
+          <div class="key-item"><kbd>&#8595;/j</kbd> <span>Move down</span></div>
+          <div class="key-item"><kbd>Enter</kbd> <span>Warp in</span></div>
+          <div class="key-item"><kbd>/</kbd> <span>Fuzzy filter</span></div>
+          <div class="key-item"><kbd>Esc</kbd> <span>Clear filter</span></div>
+          <div class="key-item"><kbd>r</kbd> <span>Rescan hosts</span></div>
+          <div class="key-item"><kbd>q</kbd> <span>Quit</span></div>
+          <div class="key-item"><kbd>Ctrl+C</kbd> <span>Force quit</span></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>
+        Built by <a href="https://github.com/clintecker">Clint Ecker</a> &middot;
+        <a href="https://github.com/clintecker/muxwarp">Source on GitHub</a> &middot;
+        MIT License
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

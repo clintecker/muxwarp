@@ -153,9 +153,9 @@ func TestKeyEnter_SetsWarpTarget(t *testing.T) {
 	if rm.WarpTarget() == nil {
 		t.Fatal("pressing enter with sessions should set warpTarget")
 	}
-	// The first filtered session should be the warp target (after sort: FREE first).
+	// The first filtered session should be the warp target (after sort: IDLE first).
 	if rm.WarpTarget().Attached != 0 {
-		t.Error("warp target should be a FREE session (first after sort)")
+		t.Error("warp target should be an IDLE session (first after sort)")
 	}
 	if cmd == nil {
 		t.Error("pressing enter should return tea.Quit command")

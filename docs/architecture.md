@@ -62,10 +62,12 @@ rendered output.
 
 ### ssh
 
-`BuildAttachArgs` constructs the argv for `syscall.Exec`. `BuildScanArgs`
+`BuildAttachArgs` constructs the argv for both exec modes. `BuildScanArgs`
 constructs the argv for the scanner's `exec.CommandContext`. `ValidSessionName`
 rejects anything outside `[A-Za-z0-9._-]` (max 256 chars). `ExecReplace`
-does the actual `syscall.Exec` to hand off the process.
+does a `syscall.Exec` to hand off the process (used for single-match direct
+warp). `ExecChild` runs ssh as a child process and returns when it exits (used
+by the TUI reconnection loop).
 
 ## Data flow
 
@@ -87,8 +89,10 @@ main()
   │    └─ user presses Enter → sets warpTarget, returns tea.Quit
   │
   ├─ p.Run() returns  ← terminal fully restored
-  ├─ playWarpAnimation()  ← plain fmt.Print, ~200ms
-  └─ ssh.ExecReplace()  ← syscall.Exec, never returns
+  ├─ tui.PlayWarpAnimation()  ← gradient bar, ~200ms
+  ├─ ssh.ExecChild()  ← runs ssh as child, returns on exit
+  ├─ tui.ReturnMessage()  ← "⟪ gate closed ⟫"
+  └─ loop back to start  ← fresh rescan, new TUI
 ```
 
 ### Direct mode (`muxwarp <name>`)
@@ -143,13 +147,22 @@ When the user presses Enter to warp:
 1. The model sets `warpTarget` and returns `tea.Quit`
 2. `p.Run()` returns -- Bubble Tea restores the terminal (exits alt screen,
    re-enables cooked mode, shows cursor)
-3. The warp animation prints to stdout (plain `fmt.Print`)
-4. `syscall.Exec` replaces the process with ssh
+3. The gradient warp animation prints to stdout
+4. ssh runs as a child process (`ExecChild`) or replaces the process
+   (`ExecReplace` for single-match direct warp)
 
-This ordering is critical. If we called `syscall.Exec` while Bubble Tea still
-owned the terminal (raw mode, alt screen), ssh would inherit a broken TTY --
-no echo, hidden cursor, mangled input. Letting `Run()` return first ensures a
-clean terminal state for the ssh session.
+This ordering is critical. If we ran ssh while Bubble Tea still owned the
+terminal (raw mode, alt screen), ssh would inherit a broken TTY -- no echo,
+hidden cursor, mangled input. Letting `Run()` return first ensures a clean
+terminal state for the ssh session.
+
+### Reconnection loop
+
+In TUI mode, after ssh exits (e.g. the user detaches from tmux with `Ctrl-b d`),
+the main loop prints a "gate closed" message, sleeps briefly, and re-launches
+the TUI with a fresh scan. This lets you quickly hop between sessions on
+different hosts without restarting muxwarp. Pressing `q` in the TUI breaks the
+loop and exits cleanly.
 
 ### Session name validation
 
