@@ -325,7 +325,7 @@ func (m Model) nameMatchSet(s Session, mi matchInfo) map[int]bool {
 
 // renderFooter builds the context-sensitive footer.
 func (m Model) renderFooter() string {
-	if m.filtering {
+	if m.mode == ModeFilter {
 		// Filter input line.
 		prompt := filterPromptStyle.Render("/ ")
 		input := filterInputStyle.Render(m.filterText)

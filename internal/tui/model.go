@@ -3,8 +3,21 @@ package tui
 import (
 	"cmp"
 	"slices"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/clintecker/muxwarp/internal/config"
+)
+
+// Mode represents the current TUI screen.
+type Mode int
+
+const (
+	ModeList   Mode = iota // default session list
+	ModeFilter             // filter input active
+	ModeEdit               // config editor
+	ModeWizard             // first-run wizard
 )
 
 // DesiredInfo holds creation metadata for a ghost session (desired but not yet existing).
@@ -40,7 +53,7 @@ type Model struct {
 	filtered    []Session          // filtered subset (or all if no filter)
 	cursor      int                // selected index in filtered list
 	filterText  string             // current filter input
-	filtering   bool               // in filter mode?
+	mode        Mode               // current TUI screen
 	scanning    bool               // scan in progress?
 	scanDone    int                // hosts completed
 	scanTotal   int                // total hosts
@@ -50,6 +63,10 @@ type Model struct {
 	selectedKey string             // stable selection tracking across filter changes
 	matchInfo   map[string]matchInfo // fuzzy highlight indexes keyed by Session.Key()
 	viewOffset  int                // first visible row in the scrolling list
+	configPath  string             // path to the config file
+	config      *config.Config     // in-memory config (for editor saves)
+	toastText   string             // toast notification text
+	toastExpiry time.Time          // when the toast should disappear
 }
 
 // SessionBatchMsg delivers a batch of sessions from one host.
@@ -84,7 +101,7 @@ func NewModelWithSessions(sessions []Session, filter string) Model {
 	}
 	sortSessions(m.sessions)
 	if filter != "" {
-		m.filtering = true
+		m.mode = ModeFilter
 		m.filterText = filter
 		m.applyFilter()
 	} else {
@@ -106,6 +123,15 @@ func (m Model) WarpTarget() *Session {
 // Width returns the current terminal width. Used by main.go for warp
 // animation after the TUI exits.
 func (m Model) Width() int { return m.width }
+
+// SetConfig stores the config and its path for editor saves.
+func (m *Model) SetConfig(cfg *config.Config, path string) {
+	m.config = cfg
+	m.configPath = path
+}
+
+// GetMode returns the current TUI mode.
+func (m Model) GetMode() Mode { return m.mode }
 
 // sortSessions sorts sessions: IDLE (Attached==0) first, then LIVE,
 // then alphabetically by host then name within each group.

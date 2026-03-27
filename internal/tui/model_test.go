@@ -48,7 +48,7 @@ func TestNewModel(t *testing.T) {
 
 	t.Run("ui_defaults", func(t *testing.T) {
 		assertModelInt(t, "cursor", m.cursor, 0)
-		assertModelBool(t, "filtering", m.filtering, false)
+		assertModelBool(t, "filtering", m.mode == ModeFilter, false)
 		assertModelNil(t, "warpTarget", m.warpTarget == nil)
 		assertModelInt(t, "width", m.width, 80)
 		assertModelInt(t, "height", m.height, 24)
@@ -87,7 +87,7 @@ func TestNewModelWithSessionsFilter(t *testing.T) {
 
 	m := NewModelWithSessions(sessions, "dev")
 
-	if !m.filtering {
+	if m.mode != ModeFilter {
 		t.Error("NewModelWithSessions with filter: filtering should be true")
 	}
 	if m.filterText != "dev" {

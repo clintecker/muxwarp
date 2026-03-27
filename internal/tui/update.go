@@ -45,7 +45,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	if m.filtering {
+	if m.mode == ModeFilter {
 		return m.handleFilterKey(msg, key)
 	}
 	return m.handleNormalKey(key)
@@ -103,7 +103,7 @@ func (m Model) handleWarp() (tea.Model, tea.Cmd) {
 
 // handleEnterFilter switches to filter mode.
 func (m Model) handleEnterFilter() (tea.Model, tea.Cmd) {
-	m.filtering = true
+	m.mode = ModeFilter
 	return m, nil
 }
 
@@ -139,7 +139,7 @@ func (m Model) handleFilterAction(msg tea.KeyPressMsg, key string) (tea.Model, t
 
 // handleFilterEsc exits filter mode and clears the filter text.
 func (m Model) handleFilterEsc() (tea.Model, tea.Cmd) {
-	m.filtering = false
+	m.mode = ModeList
 	m.filterText = ""
 	m.applyFilter()
 	m.updateSelectedKey()

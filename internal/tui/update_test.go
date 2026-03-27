@@ -182,14 +182,14 @@ func TestKeyEnter_NoSessions_NoQuit(t *testing.T) {
 func TestKeySlash_EnablesFilterMode(t *testing.T) {
 	m := newTestModelWithSessions()
 
-	if m.filtering {
+	if m.mode == ModeFilter {
 		t.Error("filtering should be false initially")
 	}
 
 	newM, cmd := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	rm := newM.(Model)
 
-	if !rm.filtering {
+	if rm.mode != ModeFilter {
 		t.Error("pressing '/' should enable filter mode")
 	}
 	if cmd != nil {
@@ -204,7 +204,7 @@ func TestFilterMode_TypingAddsToFilterText(t *testing.T) {
 	newM, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = newM.(Model)
 
-	if !m.filtering {
+	if m.mode != ModeFilter {
 		t.Fatal("should be in filter mode")
 	}
 
@@ -270,7 +270,7 @@ func TestFilterMode_EscapeClearsFilter(t *testing.T) {
 	newM, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = newM.(Model)
 
-	assertUpdateBool(t, "filtering", m.filtering, false)
+	assertUpdateBool(t, "filtering", m.mode == ModeFilter, false)
 	assertUpdateString(t, "filterText", m.filterText, "")
 	assertNoCmd(t, "Escape", cmd)
 	assertUpdateInt(t, "filtered", len(m.filtered), len(m.sessions))
