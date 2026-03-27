@@ -95,7 +95,7 @@ func TestCycleFocus_Backward(t *testing.T) {
 
 func TestCycleFocus_NoSessions_StaysOnHost(t *testing.T) {
 	m := New(testHostsEditor(), 80, 24)
-	// No sessions — Tab should wrap back to Host.
+	// No sessions — cycleFocus should wrap back to Host.
 
 	m = m.cycleFocus(1)
 	if m.GetFocus() != FocusHost {
@@ -104,6 +104,19 @@ func TestCycleFocus_NoSessions_StaysOnHost(t *testing.T) {
 	m = m.cycleFocus(-1)
 	if m.GetFocus() != FocusHost {
 		t.Errorf("after cycleFocus(-1) with no sessions: got %d, want FocusHost", m.GetFocus())
+	}
+}
+
+func TestTab_NoSessions_CreatesSessionAndFocusesName(t *testing.T) {
+	m := New(testHostsEditor(), 80, 24)
+	// Tab from Host with no sessions should auto-create a session.
+
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if len(m.Sessions()) != 1 {
+		t.Fatalf("expected 1 session after Tab, got %d", len(m.Sessions()))
+	}
+	if m.GetFocus() != FocusName {
+		t.Errorf("focus = %d, want FocusName", m.GetFocus())
 	}
 }
 

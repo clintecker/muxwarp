@@ -151,6 +151,10 @@ func (m Model) handleGlobalKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 	case "esc":
 		return m, sendCanceled(), true
 	case "tab":
+		if m.focus == FocusHost && len(m.sessions) == 0 {
+			m.addSession()
+			return m, nil, true
+		}
 		return m.cycleFocus(1), nil, true
 	case "shift+tab":
 		return m.cycleFocus(-1), nil, true
