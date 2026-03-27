@@ -9,7 +9,7 @@ import (
 	"github.com/clintecker/muxwarp/internal/sshconfig"
 )
 
-func testHosts() []sshconfig.Host {
+func testHostsEditor() []sshconfig.Host {
 	return []sshconfig.Host{
 		{Alias: "atlas", HostName: "192.168.1.50", User: "alice"},
 		{Alias: "forge", HostName: "forge.example.com", User: "deploy"},
@@ -17,7 +17,7 @@ func testHosts() []sshconfig.Host {
 }
 
 func TestNew_InitialState(t *testing.T) {
-	m := New(testHosts(), 80, 24)
+	m := New(testHostsEditor(), 80, 24)
 
 	if m.GetFocus() != FocusHost {
 		t.Errorf("initial focus = %d, want FocusHost", m.GetFocus())
@@ -44,7 +44,7 @@ func TestNewForEdit_PrePopulated(t *testing.T) {
 			{Name: "web-dev", Dir: "~/code/web", Cmd: "nvim"},
 		},
 	}
-	m := NewForEdit(entry, 2, testHosts(), 80, 24)
+	m := NewForEdit(entry, 2, testHostsEditor(), 80, 24)
 
 	if m.HostValue() != "alice@atlas" {
 		t.Errorf("host = %q, want %q", m.HostValue(), "alice@atlas")
@@ -64,7 +64,7 @@ func TestNewForEdit_PrePopulated(t *testing.T) {
 }
 
 func TestCycleFocus_Forward(t *testing.T) {
-	m := New(testHosts(), 80, 24)
+	m := New(testHostsEditor(), 80, 24)
 
 	// Start at FocusHost (0), cycle forward through all.
 	expected := []Focus{FocusList, FocusName, FocusDir, FocusCmd, FocusHost}
@@ -77,7 +77,7 @@ func TestCycleFocus_Forward(t *testing.T) {
 }
 
 func TestCycleFocus_Backward(t *testing.T) {
-	m := New(testHosts(), 80, 24)
+	m := New(testHostsEditor(), 80, 24)
 
 	// Start at FocusHost (0), cycle backward.
 	expected := []Focus{FocusCmd, FocusDir, FocusName, FocusList, FocusHost}
@@ -90,7 +90,7 @@ func TestCycleFocus_Backward(t *testing.T) {
 }
 
 func TestSave_ValidHost(t *testing.T) {
-	m := New(testHosts(), 80, 24)
+	m := New(testHostsEditor(), 80, 24)
 	m.hostInput.SetValue("alice@atlas")
 
 	updated, cmd := m.trySave()
@@ -115,7 +115,7 @@ func TestSave_ValidHost(t *testing.T) {
 }
 
 func TestSave_EmptyHost_Error(t *testing.T) {
-	m := New(testHosts(), 80, 24)
+	m := New(testHostsEditor(), 80, 24)
 	// Don't set host value — it's empty.
 
 	updated, cmd := m.trySave()
@@ -128,7 +128,7 @@ func TestSave_EmptyHost_Error(t *testing.T) {
 }
 
 func TestSave_InvalidSessionName_Error(t *testing.T) {
-	m := New(testHosts(), 80, 24)
+	m := New(testHostsEditor(), 80, 24)
 	m.hostInput.SetValue("alice@atlas")
 	m.sessions = []config.DesiredSession{
 		{Name: "bad;name"},
@@ -144,7 +144,7 @@ func TestSave_InvalidSessionName_Error(t *testing.T) {
 }
 
 func TestCancel_ProducesMsg(t *testing.T) {
-	m := New(testHosts(), 80, 24)
+	m := New(testHostsEditor(), 80, 24)
 
 	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	_ = updated
@@ -158,7 +158,7 @@ func TestCancel_ProducesMsg(t *testing.T) {
 }
 
 func TestAddSession(t *testing.T) {
-	m := New(testHosts(), 80, 24)
+	m := New(testHostsEditor(), 80, 24)
 
 	if len(m.Sessions()) != 0 {
 		t.Fatal("should start with no sessions")
@@ -177,7 +177,7 @@ func TestAddSession(t *testing.T) {
 }
 
 func TestDeleteSession(t *testing.T) {
-	m := New(testHosts(), 80, 24)
+	m := New(testHostsEditor(), 80, 24)
 	m.sessions = []config.DesiredSession{
 		{Name: "first"},
 		{Name: "second"},
@@ -194,7 +194,7 @@ func TestDeleteSession(t *testing.T) {
 }
 
 func TestDeleteSession_Cancel(t *testing.T) {
-	m := New(testHosts(), 80, 24)
+	m := New(testHostsEditor(), 80, 24)
 	m.sessions = []config.DesiredSession{{Name: "keep"}}
 	m.sessionCursor = 0
 
@@ -212,7 +212,7 @@ func TestDeleteSession_Cancel(t *testing.T) {
 }
 
 func TestView_NotEmpty(t *testing.T) {
-	m := New(testHosts(), 80, 24)
+	m := New(testHostsEditor(), 80, 24)
 	v := m.View()
 	if v == "" {
 		t.Error("View() should not be empty")
@@ -220,7 +220,7 @@ func TestView_NotEmpty(t *testing.T) {
 }
 
 func TestSave_WithSessions(t *testing.T) {
-	m := New(testHosts(), 80, 24)
+	m := New(testHostsEditor(), 80, 24)
 	m.hostInput.SetValue("alice@atlas")
 	m.sessions = []config.DesiredSession{
 		{Name: "api-server", Dir: "~/code/api"},
