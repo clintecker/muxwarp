@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/sahilm/fuzzy"
 
 	"github.com/clintecker/muxwarp/internal/config"
+	"github.com/clintecker/muxwarp/internal/logging"
 	"github.com/clintecker/muxwarp/internal/scanner"
 	"github.com/clintecker/muxwarp/internal/ssh"
 	"github.com/clintecker/muxwarp/internal/sshconfig"
@@ -26,18 +28,41 @@ var (
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "--version" {
+	logPath, args, logErr := extractLogFlag(os.Args[1:])
+	if logErr != "" {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", logErr)
+		os.Exit(1)
+	}
+	cleanup, err := logging.Init(logPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error opening log file: %v\n", err)
+		os.Exit(1)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+
+	logging.Log().Info("muxwarp starting", "version", version, "commit", commit, "date", date)
+
+	if len(args) > 0 && args[0] == "--version" {
 		fmt.Printf("muxwarp %s (commit %s, built %s)\n", version, commit, date)
+		os.Exit(0)
+	}
+
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
+		printUsage()
 		os.Exit(0)
 	}
 
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			logging.Log().Info("no config file, running wizard", "path", config.DefaultPath())
 			cfg = runWizard()
 			if cfg == nil {
 				return
 			}
+			logging.Log().Info("wizard completed", "hosts", len(cfg.Hosts))
 		} else {
 			fmt.Fprintf(os.Stderr, "Error: %v\n\nExample config (%s):\n\n%s",
 				err, config.DefaultPath(), config.ExampleConfig())
@@ -47,12 +72,39 @@ func main() {
 
 	timeoutSec := parseTimeoutSec(cfg.Defaults.Timeout)
 
-	if len(os.Args) > 1 {
-		directWarp(cfg, timeoutSec, os.Args[1])
+	if len(args) > 0 {
+		directWarp(cfg, timeoutSec, args[0])
 		return
 	}
 
 	tuiMode(cfg, timeoutSec)
+}
+
+// extractLogFlag pulls --log <path> or --log=<path> from args, returning
+// the log path and the remaining args. If --log is present without a path,
+// it returns an error message.
+func extractLogFlag(args []string) (logPath string, rest []string, err string) {
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--log" {
+			if i+1 >= len(args) {
+				return "", nil, "--log requires a file path argument"
+			}
+			logPath = args[i+1]
+			rest = append(rest, args[:i]...)
+			rest = append(rest, args[i+2:]...)
+			return logPath, rest, ""
+		}
+		if strings.HasPrefix(args[i], "--log=") {
+			logPath = strings.TrimPrefix(args[i], "--log=")
+			if logPath == "" {
+				return "", nil, "--log requires a file path argument"
+			}
+			rest = append(rest, args[:i]...)
+			rest = append(rest, args[i+1:]...)
+			return logPath, rest, ""
+		}
+	}
+	return "", args, ""
 }
 
 // tuiMode runs the interactive TUI in a loop. After warping into an ssh
@@ -61,7 +113,7 @@ func tuiMode(cfg *config.Config, timeoutSec string) {
 	for {
 		target, termWidth, configChanged := runTUIOnce(cfg, timeoutSec)
 		if configChanged {
-			// Reload config from disk and restart TUI.
+			logging.Log().Info("config changed, reloading")
 			newCfg, err := config.Load(config.DefaultPath())
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error reloading config: %v\n", err)
@@ -82,6 +134,8 @@ func tuiMode(cfg *config.Config, timeoutSec string) {
 // warpChild creates the session if needed, plays animations, runs ssh
 // as a child process, and prints the return message.
 func warpChild(cfg *config.Config, target *tui.Session, termWidth int) {
+	logging.Log().Info("warp child", "host", target.Host, "session", target.Name, "is_ghost", target.IsGhost())
+
 	if err := maybeCreateSession(cfg, target, termWidth); err != nil {
 		fmt.Fprintf(os.Stderr, "create error: %v\n", err)
 		return
@@ -130,22 +184,27 @@ func runTUIOnce(cfg *config.Config, timeoutSec string) (*tui.Session, int, bool)
 // scanAndSend runs the scanner and sends results to the TUI, injecting
 // ghost sessions for any desired sessions not found in the scan.
 func scanAndSend(ctx context.Context, cfg *config.Config, timeoutSec string, p *tea.Program) {
+	logging.Log().Info("scan starting", "hosts", len(cfg.Hosts))
 	var found []tui.Session
 	_ = scanner.ScanAll(ctx, cfg.HostTargets(), 8, timeoutSec, func(host string, sessions []scanner.Session) {
 		batch := scannerToTUI(sessions)
 		found = append(found, batch...)
+		logging.Log().Debug("scan batch", "host", host, "sessions", len(batch))
 		p.Send(tui.SessionBatchMsg{Host: host, Sessions: batch})
 	})
 
 	ghosts := buildGhosts(cfg, found)
 	if len(ghosts) > 0 {
+		logging.Log().Info("injecting ghosts", "count", len(ghosts))
 		p.Send(tui.SessionBatchMsg{Host: "ghosts", Sessions: ghosts})
 	}
+	logging.Log().Info("scan complete", "found", len(found), "ghosts", len(ghosts))
 	p.Send(tui.ScanDoneMsg{})
 }
 
 // directWarp handles `muxwarp <pattern>` — scan, fuzzy match, then warp.
 func directWarp(cfg *config.Config, timeoutSec, pattern string) {
+	logging.Log().Info("direct warp", "pattern", pattern)
 	fmt.Fprintf(os.Stderr, "Scanning gates...\n")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -208,6 +267,8 @@ func directWarpMultiple(cfg *config.Config, allSessions []tui.Session, pattern, 
 
 // warp plays the animation and execs into ssh. Never returns on success.
 func warp(cfg *config.Config, target *tui.Session) {
+	logging.Log().Info("warp exec-replace", "host", target.Host, "session", target.Name, "is_ghost", target.IsGhost())
+
 	if err := maybeCreateSession(cfg, target, 80); err != nil {
 		fmt.Fprintf(os.Stderr, "create error: %v\n", err)
 		os.Exit(1)
@@ -227,8 +288,18 @@ func maybeCreateSession(cfg *config.Config, target *tui.Session, termWidth int) 
 		return nil
 	}
 
+	logging.Log().Info("creating ghost session",
+		"host", target.Host, "session", target.Name,
+		"dir", target.Desired.Dir, "cmd", target.Desired.Cmd)
+
 	tui.PlayCreationAnimation(target.HostShort, target.Name, termWidth)
-	return ssh.CreateSession(target.Host, cfg.Defaults.Term, target.Name, target.Desired.Dir, target.Desired.Cmd)
+	err := ssh.CreateSession(target.Host, cfg.Defaults.Term, target.Name, target.Desired.Dir, target.Desired.Cmd)
+	if err != nil {
+		logging.Log().Error("ghost session creation failed", "error", err)
+	} else {
+		logging.Log().Info("ghost session created")
+	}
+	return err
 }
 
 // buildGhosts creates ghost sessions for desired sessions not found in the scan.
@@ -342,6 +413,18 @@ func runWizard() *config.Config {
 	}
 
 	return cfg
+}
+
+func printUsage() {
+	fmt.Printf(`muxwarp %s — warp into tmux sessions on remote machines
+
+Usage:
+  muxwarp                     Launch interactive TUI
+  muxwarp <pattern>           Fuzzy-match and warp directly
+  muxwarp --log <path>        Write debug logs to file
+  muxwarp --version           Print version and exit
+  muxwarp --help              Show this help
+`, version)
 }
 
 // parseTimeoutSec parses a duration string (e.g. "3s") and returns the

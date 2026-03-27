@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/clintecker/muxwarp/internal/logging"
 	"github.com/clintecker/muxwarp/internal/ssh"
 	"gopkg.in/yaml.v3"
 )
@@ -125,6 +126,7 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
+	logging.Log().Debug("config loaded", "path", path, "hosts", len(cfg.Hosts))
 	return &cfg, nil
 }
 
@@ -280,7 +282,12 @@ func Save(cfg *Config, path string) error {
 	if err != nil {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
-	return writeAtomic(path, data)
+	if err := writeAtomic(path, data); err != nil {
+		logging.Log().Error("config save failed", "path", path, "error", err)
+		return err
+	}
+	logging.Log().Debug("config saved", "path", path)
+	return nil
 }
 
 // writeAtomic writes data to a temporary file in the same directory as path,

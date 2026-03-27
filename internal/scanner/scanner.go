@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/clintecker/muxwarp/internal/logging"
 	"github.com/clintecker/muxwarp/internal/ssh"
 )
 
@@ -37,10 +38,12 @@ func (s Session) Key() string { return s.Host + "/" + s.Name }
 func ScanHost(ctx context.Context, target, timeoutSec string) ([]Session, error) {
 	out, err := runScanCmd(ctx, target, timeoutSec)
 	if err != nil {
-		// Any failure (timeout, auth, no tmux, exit code != 0) → empty.
+		logging.Log().Debug("scan failed", "host", target, "error", err)
 		return nil, nil
 	}
-	return parseSessions(out, target), nil
+	sessions := parseSessions(out, target)
+	logging.Log().Debug("scan succeeded", "host", target, "sessions", len(sessions))
+	return sessions, nil
 }
 
 // runScanCmd builds and executes the SSH command for listing tmux sessions.
@@ -136,6 +139,7 @@ func scanOneHost(ctx context.Context, host, timeoutSec string, sem chan struct{}
 		return
 	}
 
+	logging.Log().Debug("scanning host", "host", host)
 	sessions, _ := ScanHost(ctx, host, timeoutSec)
 	if len(sessions) > 0 {
 		onBatch(host, sessions)

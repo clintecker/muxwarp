@@ -162,7 +162,7 @@ func TestSave_InvalidSessionName_Error(t *testing.T) {
 	m := New(testHostsEditor(), 80, 24)
 	m.hostInput.SetValue("alice@atlas")
 	m.sessions = []config.DesiredSession{
-		{Name: "bad;name"},
+		{Name: "bad:name"},
 	}
 
 	updated, cmd := m.trySave()

@@ -6,14 +6,14 @@ package ssh
 
 import "regexp"
 
-// validSession matches tmux's default allowed session name characters.
-// NO COLON — colon is tmux's session:window separator.
-var validSession = regexp.MustCompile(`^[A-Za-z0-9._-]{1,256}$`)
+// validSession matches tmux session names: any printable non-control characters
+// except colon (tmux's session:window:pane separator). Since muxwarp passes
+// all args as direct argv elements with no shell interpolation, shell-special
+// characters like brackets, quotes, and dollar signs are safe.
+var validSession = regexp.MustCompile(`^[^\x00-\x1f\x7f:]{1,256}$`)
 
-// ValidSessionName reports whether name contains only safe characters
-// for a tmux session name. Names are validated when parsing tmux
-// list-sessions output to reject anything that could be dangerous
-// if it somehow escaped into a shell context.
+// ValidSessionName reports whether name is a valid tmux session name.
+// Rejects empty strings, control characters, colons, and names over 256 chars.
 func ValidSessionName(name string) bool {
 	return validSession.MatchString(name)
 }

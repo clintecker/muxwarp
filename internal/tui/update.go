@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/clintecker/muxwarp/internal/config"
+	"github.com/clintecker/muxwarp/internal/logging"
 	"github.com/clintecker/muxwarp/internal/tui/editor"
 )
 
@@ -144,6 +145,7 @@ func (m Model) handleCursorMove(delta int) (tea.Model, tea.Cmd) {
 func (m Model) handleWarp() (tea.Model, tea.Cmd) {
 	if len(m.filtered) > 0 && m.cursor >= 0 && m.cursor < len(m.filtered) {
 		s := m.filtered[m.cursor]
+		logging.Log().Info("warp target selected", "host", s.Host, "session", s.Name, "is_ghost", s.IsGhost())
 		m.warpTarget = &s
 		return m, tea.Quit
 	}
@@ -263,6 +265,8 @@ func (m Model) handleEditorSaved(msg editor.EditorSavedMsg) (tea.Model, tea.Cmd)
 		return m, nil
 	}
 
+	logging.Log().Info("editor saved", "target", msg.Entry.Target, "sessions", len(msg.Entry.Sessions))
+
 	if msg.EditIndex >= 0 && msg.EditIndex < len(m.config.Hosts) {
 		m.config.Hosts[msg.EditIndex] = msg.Entry
 	} else {
@@ -355,6 +359,8 @@ func (m Model) handleDeleteConfirm(key string) (tea.Model, tea.Cmd) {
 	if key != "y" {
 		return m, nil
 	}
+
+	logging.Log().Info("host deleted", "target", target)
 
 	for i, h := range m.config.Hosts {
 		if h.Target == target {

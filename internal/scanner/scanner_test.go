@@ -114,11 +114,12 @@ sleep 30
 
 func TestScanHost_InvalidSessionName(t *testing.T) {
 	// Mix of valid and invalid session names.
+	// Colons and control characters are rejected; most other characters are valid.
 	withFakeSSH(t, `#!/bin/sh
 printf 'good-session\t1\t2\n'
-printf 'evil;rm -rf /\t0\t1\n'
+printf 'bad:name\t0\t1\n'
 printf 'also_good\t0\t5\n'
-printf 'has spaces\t1\t1\n'
+printf 'bad\x01ctrl\t1\t1\n'
 `)
 
 	ctx := context.Background()

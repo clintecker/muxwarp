@@ -206,7 +206,7 @@ func TestLoad_InvalidSessionName(t *testing.T) {
 	content := []byte(`hosts:
   - target: server1
     sessions:
-      - name: "bad;name"
+      - name: "bad:name"
 `)
 	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
 		t.Fatal(err)

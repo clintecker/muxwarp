@@ -17,7 +17,21 @@ func TestValidSessionName_Valid(t *testing.T) {
 		"A",
 		"0",
 		"Session-With.Mixed_chars123",
-		strings.Repeat("x", 256), // max length
+		"bllooop[",                   // brackets are valid tmux names
+		"test(name)",                 // parentheses
+		"hello{world}",              // curly braces
+		"name#1",                     // hash
+		"@user",                      // at sign
+		"~home",                      // tilde
+		"100%done",                   // percent
+		"hello!",                     // exclamation
+		"foo=bar",                    // equals sign
+		`foo"bar`,                    // double quote
+		"foo'bar",                    // single quote
+		"foo|bar",                    // pipe
+		"foo&bar",                    // ampersand
+		"<script>",                   // angle brackets
+		strings.Repeat("x", 256),    // max length
 	}
 
 	for _, name := range valid {
@@ -35,31 +49,11 @@ func TestValidSessionName_Invalid(t *testing.T) {
 		desc string
 	}{
 		{"", "empty string"},
-		{"hello world", "space"},
-		{"foo;bar", "semicolon"},
-		{"foo`bar`", "backtick"},
-		{"$(whoami)", "dollar paren"},
-		{"foo|bar", "pipe"},
-		{"foo&bar", "ampersand"},
-		{"foo'bar", "single quote"},
-		{`foo"bar`, "double quote"},
+		{"foo:bar", "colon (tmux separator)"},
 		{"foo\nbar", "newline"},
 		{"foo\tbar", "tab"},
-		{"foo:bar", "colon (tmux separator)"},
-		{"foo/bar", "slash"},
-		{"foo\\bar", "backslash"},
-		{"foo bar", "embedded space"},
+		{"foo\x00bar", "null byte"},
 		{strings.Repeat("x", 257), "too long (257 chars)"},
-		{"hello{world}", "curly braces"},
-		{"test(name)", "parentheses"},
-		{"<script>", "angle brackets"},
-		{"foo=bar", "equals sign"},
-		{"name#1", "hash"},
-		{"100%done", "percent"},
-		{"hello!", "exclamation"},
-		{"@user", "at sign"},
-		{"~home", "tilde"},
-		{"a b", "internal space"},
 	}
 
 	for _, tc := range invalid {

@@ -5,6 +5,25 @@ All notable changes to muxwarp are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-03-27
+
+### Added
+- **Debug logging**: `--log <path>` writes structured JSON logs to a file for
+  post-mortem diagnosis of scan failures, ghost session creation, and SSH args
+- **`--help` flag**: prints usage summary with all available flags and modes
+
+### Fixed
+- **Ghost session cmd bug**: sessions with a `cmd` (e.g. `echo "READY"`) would
+  die instantly because the command replaced the shell. Now uses `tmux send-keys`
+  to type the command into the session's shell, keeping it alive after the
+  command exits
+- **Session name validation too strict**: names containing brackets, spaces,
+  quotes, or other non-alphanumeric characters (e.g. `bllooop[`) were rejected.
+  Validation now accepts any printable character except `:` (tmux's separator)
+
+### Changed
+- `--log` supports both `--log <path>` and `--log=<path>` forms
+
 ## [0.3.0] - 2026-03-27
 
 ### Added
@@ -54,6 +73,7 @@ Initial implementation.
 - YAML config at `~/.muxwarp.config.yaml`
 - Pre-commit hooks enforcing formatting, lint, tests, and complexity thresholds
 
+[0.4.0]: https://github.com/clintecker/muxwarp/releases/tag/v0.4.0
 [0.3.0]: https://github.com/clintecker/muxwarp/releases/tag/v0.3.0
 [0.2.0]: https://github.com/clintecker/muxwarp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/clintecker/muxwarp/releases/tag/v0.1.0

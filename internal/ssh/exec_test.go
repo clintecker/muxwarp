@@ -87,7 +87,7 @@ func assertArgContains(t *testing.T, args []string, value, label string) {
 			return
 		}
 	}
-	t.Errorf("BuildScanArgs missing %s (%q): %v", label, value, args)
+	t.Errorf("args missing %s (%q): %v", label, value, args)
 }
 
 func assertArgsEqual(t *testing.T, label string, got, want []string) {
@@ -105,7 +105,7 @@ func assertArgsEqual(t *testing.T, label string, got, want []string) {
 func TestBuildCreateSessionArgs_Basic(t *testing.T) {
 	t.Parallel()
 
-	args, err := BuildCreateSessionArgs("clint@indigo", "xterm-256color", "myproj", "", "")
+	args, err := BuildCreateSessionArgs("clint@indigo", "xterm-256color", "myproj", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestBuildCreateSessionArgs_Basic(t *testing.T) {
 func TestBuildCreateSessionArgs_WithDir(t *testing.T) {
 	t.Parallel()
 
-	args, err := BuildCreateSessionArgs("clint@indigo", "xterm-256color", "myproj", "~/code/myproj", "")
+	args, err := BuildCreateSessionArgs("clint@indigo", "xterm-256color", "myproj", "~/code/myproj")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -133,41 +133,68 @@ func TestBuildCreateSessionArgs_WithDir(t *testing.T) {
 	assertArgsEqual(t, "BuildCreateSessionArgs", args, want)
 }
 
-func TestBuildCreateSessionArgs_WithCmd(t *testing.T) {
-	t.Parallel()
-
-	args, err := BuildCreateSessionArgs("clint@indigo", "xterm-256color", "myproj", "", "claude --dangerously-skip-permissions")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	want := []string{
-		"ssh", "-t", "clint@indigo", "--",
-		"env", "TERM=xterm-256color", "tmux", "new-session", "-d", "-s", "myproj",
-		"claude", "--dangerously-skip-permissions",
-	}
-	assertArgsEqual(t, "BuildCreateSessionArgs", args, want)
-}
-
-func TestBuildCreateSessionArgs_NoShellInterpolation(t *testing.T) {
-	t.Parallel()
-
-	args, err := BuildCreateSessionArgs("user@host", "xterm-256color", "safe", "", "echo $(whoami)")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// "echo" and "$(whoami)" must be separate args — no shell evaluation.
-	assertArgContains(t, args, "echo", "echo command")
-	assertArgContains(t, args, "$(whoami)", "unevaluated subshell")
-}
-
 func TestBuildCreateSessionArgs_InvalidName(t *testing.T) {
 	t.Parallel()
 
-	_, err := BuildCreateSessionArgs("user@host", "xterm-256color", "bad;name", "", "")
+	_, err := BuildCreateSessionArgs("user@host", "xterm-256color", "bad:name", "")
 	if err == nil {
 		t.Fatal("expected error for invalid session name, got nil")
+	}
+}
+
+func TestBuildSendKeysArgs(t *testing.T) {
+	t.Parallel()
+
+	args := BuildSendKeysArgs("clint@indigo", "myproj", "claude --dangerously-skip-permissions")
+
+	want := []string{
+		"ssh", "clint@indigo", "--",
+		"tmux", "send-keys", "-t", "myproj", "-l", "'claude --dangerously-skip-permissions'",
+		"\\;", "send-keys", "-t", "myproj", "Enter",
+	}
+	assertArgsEqual(t, "BuildSendKeysArgs", args, want)
+}
+
+func TestBuildSendKeysArgs_QuotedCmd(t *testing.T) {
+	t.Parallel()
+
+	args := BuildSendKeysArgs("clint@indigo", "test-123", `echo "READY"`)
+
+	// The cmd must be single-quoted for the remote shell.
+	assertArgContains(t, args, `'echo "READY"'`, "single-quoted cmd")
+	// Enter must be the last arg (tmux key name).
+	if args[len(args)-1] != "Enter" {
+		t.Errorf("last arg = %q, want %q", args[len(args)-1], "Enter")
+	}
+}
+
+func TestBuildSendKeysArgs_EmbeddedSingleQuote(t *testing.T) {
+	t.Parallel()
+
+	args := BuildSendKeysArgs("host", "sess", "echo 'hello'")
+
+	// Single quotes in cmd must be escaped for the remote shell.
+	assertArgContains(t, args, `'echo '\''hello'\'''`, "escaped single quotes")
+}
+
+func TestSingleQuote(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{`echo "READY"`, `'echo "READY"'`},
+		{`simple`, `'simple'`},
+		{`it's here`, `'it'\''s here'`},
+		{`a'b'c`, `'a'\''b'\''c'`},
+	}
+
+	for _, tc := range tests {
+		got := singleQuote(tc.input)
+		if got != tc.want {
+			t.Errorf("singleQuote(%q) = %q, want %q", tc.input, got, tc.want)
+		}
 	}
 }
 

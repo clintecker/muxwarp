@@ -135,10 +135,26 @@ Fuzzy-matches `<name>` against session and host names across all hosts:
 - **Multiple matches** -- open TUI pre-filtered
 - **0 matches** -- print error and exit
 
+### Debug logging
+
+```
+muxwarp --log /tmp/mux.log
+```
+
+Writes structured JSON logs to the given file. Useful for diagnosing scan
+failures, ghost session creation issues, or SSH argument problems. When `--log`
+is not passed, no log file is created and there is zero I/O overhead.
+
 ### Version
 
 ```
 muxwarp --version
+```
+
+### Help
+
+```
+muxwarp --help
 ```
 
 ## Keybindings
@@ -192,7 +208,8 @@ muxwarp is careful about what it executes:
 - **No shell interpolation** -- SSH commands are constructed as argument arrays
   passed directly to `execve(2)`. No shell is involved.
 - **Session name validation** -- names from remote hosts are checked against
-  `[A-Za-z0-9._-]` (max 256 chars). Invalid names are silently dropped.
+  printable characters excluding `:` (max 256 chars). Invalid names are silently
+  dropped.
 - **`--` separator** -- prevents session names from being interpreted as SSH
   flags.
 - **BatchMode=yes** -- scanning uses non-interactive SSH to prevent password
@@ -211,6 +228,7 @@ muxwarp is a single Go binary with six internal packages:
 ```
 cmd/muxwarp/main.go        Entry point, arg parsing, orchestration
 internal/config/            YAML config loading/saving, defaults, validation
+internal/logging/           Structured debug logging (slog, JSON, --log flag)
 internal/scanner/           Parallel SSH scanning, result parsing
 internal/tui/               Bubble Tea v2 TUI (model, view, update, styles)
 internal/tui/editor/        Config editor and first-run wizard sub-models

@@ -1,5 +1,6 @@
 bin/
 dist/
 *.exe
+*.log
 /muxwarp
 coverage.out
