@@ -65,6 +65,8 @@ func TestNewForEdit_PrePopulated(t *testing.T) {
 
 func TestCycleFocus_Forward(t *testing.T) {
 	m := New(testHostsEditor(), 80, 24)
+	// Add a session so all focuses are available.
+	m.sessions = []config.DesiredSession{{Name: "test"}}
 
 	// Start at FocusHost (0), cycle forward through all.
 	expected := []Focus{FocusList, FocusName, FocusDir, FocusCmd, FocusHost}
@@ -78,6 +80,8 @@ func TestCycleFocus_Forward(t *testing.T) {
 
 func TestCycleFocus_Backward(t *testing.T) {
 	m := New(testHostsEditor(), 80, 24)
+	// Add a session so all focuses are available.
+	m.sessions = []config.DesiredSession{{Name: "test"}}
 
 	// Start at FocusHost (0), cycle backward.
 	expected := []Focus{FocusCmd, FocusDir, FocusName, FocusList, FocusHost}
@@ -86,6 +90,20 @@ func TestCycleFocus_Backward(t *testing.T) {
 		if m.GetFocus() != want {
 			t.Errorf("after cycleFocus(-1): got %d, want %d", m.GetFocus(), want)
 		}
+	}
+}
+
+func TestCycleFocus_NoSessions_StaysOnHost(t *testing.T) {
+	m := New(testHostsEditor(), 80, 24)
+	// No sessions — Tab should wrap back to Host.
+
+	m = m.cycleFocus(1)
+	if m.GetFocus() != FocusHost {
+		t.Errorf("after cycleFocus(1) with no sessions: got %d, want FocusHost", m.GetFocus())
+	}
+	m = m.cycleFocus(-1)
+	if m.GetFocus() != FocusHost {
+		t.Errorf("after cycleFocus(-1) with no sessions: got %d, want FocusHost", m.GetFocus())
 	}
 }
 

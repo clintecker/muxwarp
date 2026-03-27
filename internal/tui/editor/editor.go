@@ -227,9 +227,24 @@ func (m Model) handleDeleteConfirm(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 // --- Focus management ---
 
 func (m Model) cycleFocus(delta int) Model {
-	next := (int(m.focus) + delta + focusCount) % focusCount
+	next := int(m.focus)
+	for range focusCount {
+		next = (next + delta + focusCount) % focusCount
+		if m.focusAvailable(Focus(next)) {
+			break
+		}
+	}
 	m.focusField(Focus(next))
 	return m
+}
+
+// focusAvailable returns whether the given focus target is usable.
+// Session-related focuses are skipped when there are no sessions.
+func (m Model) focusAvailable(f Focus) bool {
+	if len(m.sessions) > 0 {
+		return true
+	}
+	return f == FocusHost
 }
 
 func (m *Model) focusField(f Focus) {
