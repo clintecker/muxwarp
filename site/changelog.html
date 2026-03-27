@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Changelog - muxwarp</title>
+  <meta name="description" content="muxwarp changelog — all notable changes by version.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#9650;</text></svg>">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+    :root {
+      --green-50: #ECFDF5;
+      --green-100: #D1FAE5;
+      --green-200: #A7F3D0;
+      --green-300: #6EE7B7;
+      --green-400: #34D399;
+      --green-500: #10B981;
+      --green-600: #059669;
+      --green-700: #047857;
+      --green-800: #065F46;
+      --green-900: #064E3B;
+      --green-950: #022C22;
+      --white: #FFFFFF;
+      --text: #064E3B;
+      --text-muted: #6B8F80;
+      --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Space Grotesk', -apple-system, system-ui, sans-serif;
+      background: var(--white);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--green-200);
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--green-800);
+    }
+
+    .nav-logo .tri {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: var(--green-500);
+      color: white;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 28px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--green-600); }
+
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 120px 24px 80px;
+    }
+
+    .page-header {
+      margin-bottom: 48px;
+    }
+
+    .page-header .label {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--green-500);
+      margin-bottom: 8px;
+    }
+
+    .page-header h1 {
+      font-size: 2.4rem;
+      font-weight: 700;
+      letter-spacing: -1px;
+      color: var(--green-950);
+    }
+
+    .page-header p {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
+    .version-block {
+      margin-bottom: 48px;
+      padding: 28px;
+      background: var(--green-50);
+      border: 1px solid var(--green-200);
+      border-radius: 16px;
+    }
+
+    .version-header {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .version-header h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--green-900);
+      font-family: var(--mono);
+    }
+
+    .version-date {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+
+    .change-type {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 6px;
+      margin: 16px 0 8px;
+    }
+
+    .change-added {
+      background: var(--green-100);
+      color: var(--green-700);
+    }
+
+    .change-changed {
+      background: #FEF3C7;
+      color: #92400E;
+    }
+
+    .change-fixed {
+      background: #DBEAFE;
+      color: #1E40AF;
+    }
+
+    .change-removed {
+      background: #FEE2E2;
+      color: #991B1B;
+    }
+
+    ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    li {
+      position: relative;
+      padding: 6px 0 6px 20px;
+      font-size: 0.95rem;
+      color: var(--text);
+      line-height: 1.55;
+    }
+
+    li::before {
+      content: '\25B8';
+      position: absolute;
+      left: 0;
+      color: var(--green-400);
+      font-size: 0.8rem;
+    }
+
+    li strong {
+      color: var(--green-800);
+    }
+
+    li code {
+      font-family: var(--mono);
+      font-size: 0.85em;
+      background: var(--green-100);
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: var(--green-700);
+    }
+
+    footer {
+      text-align: center;
+      padding: 32px 24px;
+      border-top: 1px solid var(--green-200);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    footer a {
+      color: var(--green-600);
+      text-decoration: none;
+    }
+
+    footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 768px) {
+      nav { padding: 12px 16px; }
+      .nav-links { gap: 16px; }
+      main { padding: 100px 16px 60px; }
+      .page-header h1 { font-size: 1.8rem; }
+      .version-block { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="nav-logo" href="index.html">
+      <span class="tri">&#9650;</span>
+      muxwarp
+    </a>
+    <ul class="nav-links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="changelog.html">Changelog</a></li>
+      <li><a href="https://github.com/clintecker/muxwarp">GitHub</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <div class="page-header">
+      <span class="label">History</span>
+      <h1>Changelog</h1>
+      <p>All notable changes to muxwarp, by version.</p>
+    </div>
+
+<div class="version-block"><div class="version-header"><h2>v0.2.0</h2><span class="version-date">2026-03-27</span></div>
+<span class="change-type change-changed">Changed</span>
+<ul>
+<li>Warp animation reverted to clean single-line growing gradient bar</li>
+</ul>
+<span class="change-type change-added">Added</span>
+<ul>
+<li>Goreleaser GitHub Actions workflow for automated cross-platform releases</li>
+</ul>
+</div>
+<div class="version-block"><div class="version-header"><h2>v0.1.0</h2><span class="version-date">2026-03-26</span></div>
+<span class="change-type change-added">Added</span>
+<ul>
+<li><strong>Desired sessions</strong>: declare per-host tmux sessions in config; ghost entries (◌ NEW) appear in the TUI for sessions that don't exist yet and are created on-the-fly when you warp into them</li>
+<li>Mixed config format: hosts can be plain strings or objects with <code>sessions</code> list</li>
+<li>Creation animation ("materializing lane") plays before warp for ghost sessions</li>
+<li>Brochure site with feature cards, terminal mockup, and install instructions</li>
+</ul>
+<span class="change-type change-changed">Changed</span>
+<ul>
+<li>Config <code>hosts</code> now supports both <code>- user@host</code> strings and <code>- target: user@host</code> objects with optional <code>sessions</code> list</li>
+</ul>
+</div>
+<div class="version-block"><div class="version-header"><h2>v0.0.0</h2><span class="version-date">2026-03-25</span></div>
+<span class="change-type change-added">Added</span>
+<ul>
+<li>TUI with Bubble Tea v2: session list, header with gradient rule, adaptive column layout, fuzzy filter mode, keyboard navigation</li>
+<li>Parallel SSH scanning with configurable timeout and BatchMode=yes</li>
+<li>Direct warp mode (<code>muxwarp <name></code>) with fuzzy matching</li>
+<li>Warp animation with cyan→purple gradient block bar</li>
+<li>Session name validation against <code>[A-Za-z0-9._-]</code></li>
+<li><code>syscall.Exec</code> handoff for clean TTY transfer to ssh</li>
+<li>YAML config at <code>~/.muxwarp.config.yaml</code></li>
+<li>Pre-commit hooks enforcing formatting, lint, tests, and complexity thresholds</li>
+</ul>
+</div>
+  </main>
+
+  <footer>
+    <p>
+      Built by <a href="https://github.com/clintecker">Clint Ecker</a> &middot;
+      <a href="https://github.com/clintecker/muxwarp">Source on GitHub</a> &middot;
+      MIT License
+    </p>
+  </footer>
+</body>
+</html>
