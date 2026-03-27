@@ -44,7 +44,7 @@ func TestNewForEdit_PrePopulated(t *testing.T) {
 			{Name: "web-dev", Dir: "~/code/web", Cmd: "nvim"},
 		},
 	}
-	m := NewForEdit(entry, 2, testHostsEditor(), 80, 24)
+	m := NewForEdit(entry, 2, "api-server", testHostsEditor(), 80, 24)
 
 	if m.HostValue() != "alice@atlas" {
 		t.Errorf("host = %q, want %q", m.HostValue(), "alice@atlas")
@@ -239,6 +239,44 @@ func TestDeleteSession_Cancel(t *testing.T) {
 	}
 	if len(updated.Sessions()) != 1 {
 		t.Errorf("session should not be deleted after 'n', got %d", len(updated.Sessions()))
+	}
+}
+
+func TestNewForEdit_SelectedSession_Existing(t *testing.T) {
+	entry := config.HostEntry{
+		Target: "alice@atlas",
+		Sessions: []config.DesiredSession{
+			{Name: "api-server", Dir: "~/code/api"},
+			{Name: "web-dev", Dir: "~/code/web"},
+		},
+	}
+	m := NewForEdit(entry, 0, "web-dev", testHostsEditor(), 80, 24)
+
+	// Should select existing session, not create a new one.
+	if len(m.Sessions()) != 2 {
+		t.Fatalf("sessions = %d, want 2", len(m.Sessions()))
+	}
+	if m.sessionCursor != 1 {
+		t.Errorf("sessionCursor = %d, want 1 (web-dev)", m.sessionCursor)
+	}
+	if m.GetFocus() != FocusList {
+		t.Errorf("focus = %d, want FocusList", m.GetFocus())
+	}
+}
+
+func TestNewForEdit_SelectedSession_New(t *testing.T) {
+	entry := config.HostEntry{Target: "alice@atlas"}
+	m := NewForEdit(entry, 0, "tracker", testHostsEditor(), 80, 24)
+
+	// Should create a new session with that name.
+	if len(m.Sessions()) != 1 {
+		t.Fatalf("sessions = %d, want 1", len(m.Sessions()))
+	}
+	if m.Sessions()[0].Name != "tracker" {
+		t.Errorf("session name = %q, want %q", m.Sessions()[0].Name, "tracker")
+	}
+	if m.GetFocus() != FocusList {
+		t.Errorf("focus = %d, want FocusList", m.GetFocus())
 	}
 }
 

@@ -266,7 +266,12 @@ func (m Model) handleEditorSaved(msg editor.EditorSavedMsg) (tea.Model, tea.Cmd)
 	if msg.EditIndex >= 0 && msg.EditIndex < len(m.config.Hosts) {
 		m.config.Hosts[msg.EditIndex] = msg.Entry
 	} else {
-		m.config.Hosts = append(m.config.Hosts, msg.Entry)
+		// Adding: merge into existing host if target already configured.
+		if idx := findHostByTarget(m.config.Hosts, msg.Entry.Target); idx >= 0 {
+			m.config.Hosts[idx].Sessions = mergeSessions(m.config.Hosts[idx].Sessions, msg.Entry.Sessions)
+		} else {
+			m.config.Hosts = append(m.config.Hosts, msg.Entry)
+		}
 	}
 
 	if err := config.Save(m.config, m.configPath); err != nil {
@@ -276,6 +281,32 @@ func (m Model) handleEditorSaved(msg editor.EditorSavedMsg) (tea.Model, tea.Cmd)
 
 	m.configChanged = true
 	return m, tea.Quit
+}
+
+// findHostByTarget returns the index of the host with the given target, or -1.
+func findHostByTarget(hosts []config.HostEntry, target string) int {
+	for i, h := range hosts {
+		if h.Target == target {
+			return i
+		}
+	}
+	return -1
+}
+
+// mergeSessions appends new sessions that don't already exist in existing.
+func mergeSessions(existing, incoming []config.DesiredSession) []config.DesiredSession {
+	names := make(map[string]bool)
+	for _, s := range existing {
+		names[s.Name] = true
+	}
+	result := make([]config.DesiredSession, len(existing))
+	copy(result, existing)
+	for _, s := range incoming {
+		if s.Name != "" && !names[s.Name] {
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 // handleAddHost opens the editor for adding a new host.
@@ -294,7 +325,11 @@ func (m Model) handleEditHost() (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	m.editor = editor.NewForEdit(entry, idx, m.sshHosts, m.width, m.height)
+	selectedSession := ""
+	if m.cursor >= 0 && m.cursor < len(m.filtered) {
+		selectedSession = m.filtered[m.cursor].Name
+	}
+	m.editor = editor.NewForEdit(entry, idx, selectedSession, m.sshHosts, m.width, m.height)
 	m.mode = ModeEdit
 	return m, m.editor.Init()
 }

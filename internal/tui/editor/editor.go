@@ -70,15 +70,34 @@ func New(sshHosts []sshconfig.Host, width, height int) Model {
 }
 
 // NewForEdit creates a new editor model pre-populated for editing an existing host.
-func NewForEdit(entry config.HostEntry, index int, sshHosts []sshconfig.Host, width, height int) Model {
+// selectedSession pre-selects or creates a session with that name.
+func NewForEdit(entry config.HostEntry, index int, selectedSession string, sshHosts []sshconfig.Host, width, height int) Model {
 	m := New(sshHosts, width, height)
 	m.editing = true
 	m.editIndex = index
 	m.hostInput.SetValue(entry.Target)
 	m.sessions = make([]config.DesiredSession, len(entry.Sessions))
 	copy(m.sessions, entry.Sessions)
+
+	// Pre-select or create the requested session.
+	if selectedSession != "" {
+		found := false
+		for i, s := range m.sessions {
+			if s.Name == selectedSession {
+				m.sessionCursor = i
+				found = true
+				break
+			}
+		}
+		if !found {
+			m.sessions = append(m.sessions, config.DesiredSession{Name: selectedSession})
+			m.sessionCursor = len(m.sessions) - 1
+		}
+	}
+
 	if len(m.sessions) > 0 {
 		m.loadSession()
+		m.focusField(FocusList)
 	}
 	return m
 }
@@ -421,6 +440,13 @@ func (m Model) renderSessionFieldsSection() string {
 	}
 
 	var b strings.Builder
+	// Show which session is being edited.
+	name := m.sessions[m.sessionCursor].Name
+	if name == "" {
+		name = "(new session)"
+	}
+	b.WriteString(sectionStyle.Render(fmt.Sprintf("  Editing: %s", name)))
+	b.WriteString("\n\n")
 	b.WriteString(labelStyle.Render("  Session name"))
 	b.WriteString("\n")
 	b.WriteString(m.renderInput(m.nameInput, FocusName))
@@ -453,7 +479,12 @@ func (m Model) renderInput(ti textinput.Model, f Focus) string {
 }
 
 func (m Model) renderEditorFooter() string {
-	return footerHintStyle.Render("  ctrl+s save │ esc cancel │ tab next field")
+	switch m.focus {
+	case FocusList:
+		return footerHintStyle.Render("  ↑/↓ navigate │ enter edit │ ctrl+n add │ ctrl+d delete │ ctrl+s save")
+	default:
+		return footerHintStyle.Render("  ctrl+s save │ esc cancel │ tab next field")
+	}
 }
 
 // --- Helpers ---

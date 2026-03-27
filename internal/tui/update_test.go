@@ -509,6 +509,35 @@ func TestEditorCanceled_ReturnsToList(t *testing.T) {
 	}
 }
 
+func TestEditorSaved_MergesDuplicateHost(t *testing.T) {
+	m := newTestModelWithSessions()
+	m.config = &config.Config{
+		Hosts: []config.HostEntry{
+			{Target: "alpha", Sessions: []config.DesiredSession{{Name: "existing"}}},
+		},
+	}
+	m.configPath = "/dev/null" // avoid actual file write
+
+	// Simulate adding a host with the same target.
+	msg := editor.EditorSavedMsg{
+		Entry:     config.HostEntry{Target: "alpha", Sessions: []config.DesiredSession{{Name: "new-session"}}},
+		EditIndex: -1,
+	}
+	newM, _ := m.Update(msg)
+	rm := newM.(Model)
+
+	// Should merge, not duplicate.
+	if len(rm.config.Hosts) != 1 {
+		t.Fatalf("hosts = %d, want 1 (merged)", len(rm.config.Hosts))
+	}
+	if len(rm.config.Hosts[0].Sessions) != 2 {
+		t.Fatalf("sessions = %d, want 2", len(rm.config.Hosts[0].Sessions))
+	}
+	if rm.config.Hosts[0].Sessions[1].Name != "new-session" {
+		t.Errorf("merged session = %q, want %q", rm.config.Hosts[0].Sessions[1].Name, "new-session")
+	}
+}
+
 func TestWizardSaved_SetsConfigAndQuits(t *testing.T) {
 	m := NewModel(0)
 	m.mode = ModeWizard
