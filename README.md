@@ -22,7 +22,7 @@ Declare desired sessions in your config and muxwarp shows them as ghost entries
    deploy        ◆ LIVE  ▪▪     atlas
    new-project   ◌ NEW          atlas      ← desired but doesn't exist yet
 
-↑/↓ navigate │ enter warp │ / filter │ r rescan │ q quit
+enter warp │ / filter │ a add │ e edit │ d delete │ q quit
 ```
 
 ## Install
@@ -50,7 +50,8 @@ Pre-built binaries for Linux and macOS (amd64/arm64) are available on the
 
 ## Quick start
 
-Create `~/.muxwarp.config.yaml`:
+Run `muxwarp` with no config file and the first-run wizard will walk you through
+adding your first host. Or create `~/.muxwarp.config.yaml` by hand:
 
 ```yaml
 hosts:
@@ -149,6 +150,9 @@ muxwarp --version
 | `Enter`     | Warp into selected session |
 | `/`         | Toggle filter mode         |
 | `Esc`       | Clear filter               |
+| `a`         | Add a new host             |
+| `e`         | Edit selected host         |
+| `d`         | Delete selected host       |
 | `r`         | Rescan all hosts           |
 | `q`         | Quit                       |
 | `Ctrl+C`    | Quit (works in any mode)   |
@@ -156,9 +160,12 @@ muxwarp --version
 In filter mode, type to fuzzy-match against host and session names. Matched
 characters are highlighted in the list.
 
+In the config editor, `Tab`/`Shift+Tab` cycle fields, `Ctrl+S` saves, `Esc`
+cancels. The host field autocompletes from your `~/.ssh/config`.
+
 ## How it works
 
-1. Reads `~/.muxwarp.config.yaml` for your list of SSH targets
+1. Reads `~/.muxwarp.config.yaml` (or runs the first-run wizard if missing)
 2. Spawns one goroutine per host (up to 8 concurrent), each running:
    ```
    ssh -o ConnectTimeout=3 -o BatchMode=yes <target> \
@@ -199,14 +206,16 @@ muxwarp is careful about what it executes:
 
 ## Architecture
 
-muxwarp is a single Go binary with four internal packages:
+muxwarp is a single Go binary with six internal packages:
 
 ```
 cmd/muxwarp/main.go        Entry point, arg parsing, orchestration
-internal/config/            YAML config loading, defaults, validation
+internal/config/            YAML config loading/saving, defaults, validation
 internal/scanner/           Parallel SSH scanning, result parsing
 internal/tui/               Bubble Tea v2 TUI (model, view, update, styles)
+internal/tui/editor/        Config editor and first-run wizard sub-models
 internal/ssh/               SSH argv construction, validation, exec
+internal/sshconfig/         ~/.ssh/config parser for host autocomplete
 ```
 
 See [`docs/architecture.md`](docs/architecture.md) for the full technical

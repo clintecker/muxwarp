@@ -988,7 +988,7 @@
    <span class="t-white">build-main</span>    <span class="t-cyan">&#9671; IDLE</span>  <span class="t-dim">&#9642;&#9642;&#9642;</span>    <span class="t-green">forge</span>
    <span class="t-white">new-project</span>   <span style="color:#BD93F9;font-weight:bold">&#9676; NEW</span>          <span class="t-green">forge</span>
 
-<span class="t-dim">&#8593;/&#8595; navigate &#9474; enter warp &#9474; / filter &#9474; r rescan &#9474; q quit</span></div>
+<span class="t-dim">enter warp &#9474; / filter &#9474; a add &#9474; e edit &#9474; d delete &#9474; q quit</span></div>
         </div>
       </div>
     </section>
@@ -1046,6 +1046,16 @@
             <h3>Desired sessions</h3>
             <p>Declare sessions in your config. If they don't exist yet, they appear as ghost entries (&#9676; NEW). Warp in to create them on-the-fly.</p>
           </div>
+          <div class="feature-card">
+            <div class="feature-icon">&#9998;</div>
+            <h3>In-TUI config editor</h3>
+            <p>Press <code>a</code> to add hosts, <code>e</code> to edit, <code>d</code> to delete. SSH autocomplete, live YAML preview. No hand-editing YAML.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">&#10024;</div>
+            <h3>First-run wizard</h3>
+            <p>No config file? muxwarp walks you through adding your first host and optional desired session interactively.</p>
+          </div>
         </div>
       </div>
     </section>
@@ -1062,7 +1072,7 @@
           <div class="timeline-step">
             <div class="step-num">1</div>
             <h3>Configure</h3>
-            <p>List your SSH targets in <code>~/.muxwarp.config.yaml</code></p>
+            <p>Run the first-run wizard or list SSH targets in <code>~/.muxwarp.config.yaml</code></p>
           </div>
           <div class="timeline-step">
             <div class="step-num">2</div>
@@ -1130,6 +1140,9 @@
           <div class="key-pill"><kbd>Enter</kbd> <span>Warp in</span></div>
           <div class="key-pill"><kbd>/</kbd> <span>Fuzzy filter</span></div>
           <div class="key-pill"><kbd>Esc</kbd> <span>Clear filter</span></div>
+          <div class="key-pill"><kbd>a</kbd> <span>Add host</span></div>
+          <div class="key-pill"><kbd>e</kbd> <span>Edit host</span></div>
+          <div class="key-pill"><kbd>d</kbd> <span>Delete host</span></div>
           <div class="key-pill"><kbd>r</kbd> <span>Rescan</span></div>
           <div class="key-pill"><kbd>q</kbd> <span>Quit</span></div>
           <div class="key-pill"><kbd>Ctrl+C</kbd> <span>Force quit</span></div>

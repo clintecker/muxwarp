@@ -5,6 +5,18 @@ All notable changes to muxwarp are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-03-27
+
+### Added
+- **In-TUI config editor**: press `a` to add a host, `e` to edit the selected
+  host, `d` to delete — no need to hand-edit YAML
+- **First-run wizard**: when no config file exists, an interactive wizard walks
+  you through adding your first host and optional desired session
+- **SSH config autocomplete**: host input reads `~/.ssh/config` and offers ghost
+  text suggestions, a metadata preview line, and a Ctrl+Space dropdown picker
+- **YAML preview panel**: live syntax-highlighted preview of the config entry
+  being edited (visible at terminal width >= 100)
+
 ## [0.2.0] - 2026-03-27
 
 ### Changed
@@ -42,6 +54,7 @@ Initial implementation.
 - YAML config at `~/.muxwarp.config.yaml`
 - Pre-commit hooks enforcing formatting, lint, tests, and complexity thresholds
 
+[0.3.0]: https://github.com/clintecker/muxwarp/releases/tag/v0.3.0
 [0.2.0]: https://github.com/clintecker/muxwarp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/clintecker/muxwarp/releases/tag/v0.1.0
 [0.0.0]: https://github.com/clintecker/muxwarp/commits/bfc0afe
