@@ -102,18 +102,11 @@ func TestRenderFooter_NormalMode(t *testing.T) {
 	m := newTestModelWithSessions()
 	footer := m.renderFooter()
 
-	// Normal mode footer should contain navigation hints.
-	if !strings.Contains(footer, "navigate") {
-		t.Errorf("normal footer should contain 'navigate', got: %q", footer)
-	}
-	if !strings.Contains(footer, "enter") {
-		t.Errorf("normal footer should contain 'enter', got: %q", footer)
-	}
-	if !strings.Contains(footer, "filter") {
-		t.Errorf("normal footer should contain 'filter', got: %q", footer)
-	}
-	if !strings.Contains(footer, "quit") {
-		t.Errorf("normal footer should contain 'quit', got: %q", footer)
+	// Normal mode footer should contain key hints.
+	for _, want := range []string{"warp", "filter", "add", "edit", "delete", "quit"} {
+		if !strings.Contains(footer, want) {
+			t.Errorf("normal footer should contain %q, got: %q", want, footer)
+		}
 	}
 }
 
@@ -145,16 +138,15 @@ func TestRenderFooter_EmptySessions(t *testing.T) {
 
 	footer := m.renderFooter()
 
-	// Empty state footer should show rescan and quit hints.
-	if !strings.Contains(footer, "rescan") {
-		t.Errorf("empty footer should contain 'rescan', got: %q", footer)
+	// Empty state footer should show add, rescan, and quit hints.
+	for _, want := range []string{"add", "rescan", "quit"} {
+		if !strings.Contains(footer, want) {
+			t.Errorf("empty footer should contain %q, got: %q", want, footer)
+		}
 	}
-	if !strings.Contains(footer, "quit") {
-		t.Errorf("empty footer should contain 'quit', got: %q", footer)
-	}
-	// Should NOT contain navigate/filter since there's nothing to navigate.
-	if strings.Contains(footer, "navigate") {
-		t.Errorf("empty footer should not contain 'navigate', got: %q", footer)
+	// Should NOT contain filter since there's nothing to filter.
+	if strings.Contains(footer, "filter") {
+		t.Errorf("empty footer should not contain 'filter', got: %q", footer)
 	}
 }
 

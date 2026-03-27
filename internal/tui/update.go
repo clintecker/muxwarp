@@ -4,16 +4,29 @@ import (
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/clintecker/muxwarp/internal/config"
+	"github.com/clintecker/muxwarp/internal/tui/editor"
 )
 
 // Update implements tea.Model. It handles key presses, window resize events,
-// and scanner messages.
+// scanner messages, and editor messages.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		if m.mode == ModeEdit {
+			m.editor.Resize(msg.Width, msg.Height)
+		}
 		m.ensureViewport()
+		return m, nil
+
+	case editor.EditorSavedMsg:
+		return m.handleEditorSaved(msg)
+
+	case editor.EditorCanceledMsg:
+		m.mode = ModeList
 		return m, nil
 
 	case tea.KeyPressMsg:
@@ -32,17 +45,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Forward other messages (cursor blink, etc.) to editor in edit mode.
+	if m.mode == ModeEdit {
+		return m.updateEditor(msg)
+	}
+
 	return m, nil
 }
 
 // handleKey routes key presses to the appropriate handler based on the
-// current mode (filtering vs normal).
+// current mode.
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
 	// Global keys that work in any mode.
 	if key == "ctrl+c" {
 		return m, tea.Quit
+	}
+
+	// Delegate to editor in edit mode.
+	if m.mode == ModeEdit {
+		return m.updateEditor(msg)
 	}
 
 	if m.mode == ModeFilter {
@@ -53,6 +76,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // handleNormalKey processes keys in normal (non-filter) mode.
 func (m Model) handleNormalKey(key string) (tea.Model, tea.Cmd) {
+	// Handle pending delete confirmation first.
+	if m.confirmDeleteTarget != "" {
+		return m.handleDeleteConfirm(key)
+	}
 	if delta, ok := cursorDelta(key); ok {
 		return m.handleCursorMove(delta)
 	}
@@ -70,6 +97,12 @@ func (m Model) handleNormalAction(key string) (tea.Model, tea.Cmd) {
 		return m.handleEnterFilter()
 	case "r":
 		return m.handleRescan()
+	case "a":
+		return m.handleAddHost()
+	case "e":
+		return m.handleEditHost()
+	case "d":
+		return m.handleDeleteHost()
 	}
 	return m, nil
 }
@@ -189,4 +222,93 @@ func (m *Model) ensureViewport() {
 		m.viewOffset = m.cursor - visible + 1
 	}
 	m.viewOffset = max(m.viewOffset, 0)
+}
+
+// --- Editor integration ---
+
+// updateEditor delegates a message to the editor sub-model.
+func (m Model) updateEditor(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	m.editor, cmd = m.editor.Update(msg)
+	return m, cmd
+}
+
+// handleEditorSaved persists the saved config entry and restarts the TUI.
+func (m Model) handleEditorSaved(msg editor.EditorSavedMsg) (tea.Model, tea.Cmd) {
+	if m.config == nil {
+		m.mode = ModeList
+		return m, nil
+	}
+
+	if msg.EditIndex >= 0 && msg.EditIndex < len(m.config.Hosts) {
+		m.config.Hosts[msg.EditIndex] = msg.Entry
+	} else {
+		m.config.Hosts = append(m.config.Hosts, msg.Entry)
+	}
+
+	if err := config.Save(m.config, m.configPath); err != nil {
+		m.mode = ModeList
+		return m, nil
+	}
+
+	m.configChanged = true
+	return m, tea.Quit
+}
+
+// handleAddHost opens the editor for adding a new host.
+func (m Model) handleAddHost() (tea.Model, tea.Cmd) {
+	if m.config == nil {
+		return m, nil
+	}
+	m.editor = editor.New(m.sshHosts, m.width, m.height)
+	m.mode = ModeEdit
+	return m, m.editor.Init()
+}
+
+// handleEditHost opens the editor pre-populated for the current session's host.
+func (m Model) handleEditHost() (tea.Model, tea.Cmd) {
+	entry, idx, ok := m.findHostEntry()
+	if !ok {
+		return m, nil
+	}
+	m.editor = editor.NewForEdit(entry, idx, m.sshHosts, m.width, m.height)
+	m.mode = ModeEdit
+	return m, m.editor.Init()
+}
+
+// handleDeleteHost initiates delete confirmation for the current session's host.
+func (m Model) handleDeleteHost() (tea.Model, tea.Cmd) {
+	if m.config == nil || len(m.filtered) == 0 {
+		return m, nil
+	}
+	_, _, ok := m.findHostEntry()
+	if !ok {
+		return m, nil
+	}
+	m.confirmDeleteTarget = m.filtered[m.cursor].Host
+	return m, nil
+}
+
+// handleDeleteConfirm handles y/n response to delete confirmation.
+func (m Model) handleDeleteConfirm(key string) (tea.Model, tea.Cmd) {
+	target := m.confirmDeleteTarget
+	m.confirmDeleteTarget = ""
+
+	if key != "y" {
+		return m, nil
+	}
+
+	for i, h := range m.config.Hosts {
+		if h.Target == target {
+			m.config.Hosts = append(m.config.Hosts[:i], m.config.Hosts[i+1:]...)
+			break
+		}
+	}
+
+	if err := config.Save(m.config, m.configPath); err != nil {
+		return m, nil
+	}
+
+	m.configChanged = true
+	return m, tea.Quit
 }

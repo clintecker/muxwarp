@@ -10,6 +10,28 @@ import (
 
 // View implements tea.Model. It renders the full TUI screen.
 func (m Model) View() tea.View {
+	var content string
+
+	switch m.mode {
+	case ModeEdit:
+		content = m.renderEditorScreen()
+	default:
+		content = m.renderListScreen()
+	}
+
+	// Pad to full height so the layout doesn't jump.
+	contentHeight := lipgloss.Height(content)
+	if contentHeight < m.height {
+		content += strings.Repeat("\n", m.height-contentHeight)
+	}
+
+	v := tea.NewView(content)
+	v.AltScreen = true
+	return v
+}
+
+// renderListScreen renders the session list screen (ModeList and ModeFilter).
+func (m Model) renderListScreen() string {
 	var b strings.Builder
 
 	b.WriteString(m.renderHeader())
@@ -24,16 +46,17 @@ func (m Model) View() tea.View {
 	b.WriteRune('\n')
 	b.WriteString(m.renderFooter())
 
-	// Pad to full height so the layout doesn't jump.
-	content := b.String()
-	contentHeight := lipgloss.Height(content)
-	if contentHeight < m.height {
-		content += strings.Repeat("\n", m.height-contentHeight)
-	}
+	return b.String()
+}
 
-	v := tea.NewView(content)
-	v.AltScreen = true
-	return v
+// renderEditorScreen renders the config editor screen.
+func (m Model) renderEditorScreen() string {
+	var b strings.Builder
+	b.WriteString(m.renderHeader())
+	b.WriteRune('\n')
+	b.WriteRune('\n')
+	b.WriteString(m.editor.View())
+	return b.String()
 }
 
 // renderHeader builds the header: ▲ muxwarp ──gradient── status
@@ -349,10 +372,17 @@ func (m Model) renderFooter() string {
 	}
 
 	if len(m.sessions) == 0 {
-		return footerStyle.Render("r rescan │ q quit")
+		return footerStyle.Render("a add host │ r rescan │ q quit")
 	}
 
-	return footerStyle.Render("↑/↓ navigate │ enter warp │ / filter │ r rescan │ q quit")
+	if m.confirmDeleteTarget != "" {
+		prompt := lipgloss.NewStyle().Foreground(colorRed).Bold(true).Render(
+			fmt.Sprintf("Delete host %q? ", m.confirmDeleteTarget))
+		hint := footerStyle.Render("y confirm │ any key cancel")
+		return prompt + hint
+	}
+
+	return footerStyle.Render("enter warp │ / filter │ a add │ e edit │ d delete │ q quit")
 }
 
 // renderEmpty renders the empty state when no sessions are found.

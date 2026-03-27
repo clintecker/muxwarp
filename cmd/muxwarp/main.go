@@ -13,6 +13,7 @@ import (
 	"github.com/clintecker/muxwarp/internal/config"
 	"github.com/clintecker/muxwarp/internal/scanner"
 	"github.com/clintecker/muxwarp/internal/ssh"
+	"github.com/clintecker/muxwarp/internal/sshconfig"
 	"github.com/clintecker/muxwarp/internal/tui"
 )
 
@@ -50,7 +51,18 @@ func main() {
 // session and returning, the TUI restarts with a fresh scan.
 func tuiMode(cfg *config.Config, timeoutSec string) {
 	for {
-		target, termWidth := runTUIOnce(cfg, timeoutSec)
+		target, termWidth, configChanged := runTUIOnce(cfg, timeoutSec)
+		if configChanged {
+			// Reload config from disk and restart TUI.
+			newCfg, err := config.Load(config.DefaultPath())
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reloading config: %v\n", err)
+				return
+			}
+			cfg = newCfg
+			timeoutSec = parseTimeoutSec(cfg.Defaults.Timeout)
+			continue
+		}
 		if target == nil {
 			return // user quit
 		}
@@ -78,11 +90,14 @@ func warpChild(cfg *config.Config, target *tui.Session, termWidth int) {
 }
 
 // runTUIOnce runs a single TUI session with background scanning. Returns
-// the warp target (nil if the user quit) and the terminal width.
-func runTUIOnce(cfg *config.Config, timeoutSec string) (*tui.Session, int) {
+// the warp target (nil if the user quit), the terminal width, and whether
+// the config was modified (requiring a restart with fresh scan).
+func runTUIOnce(cfg *config.Config, timeoutSec string) (*tui.Session, int, bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	m := tui.NewModel(len(cfg.Hosts))
+	m.SetConfig(cfg, config.DefaultPath())
+	m.SetSSHHosts(sshconfig.ParseHosts())
 	p := tea.NewProgram(m)
 
 	// Start scanning in background, then inject ghosts for desired sessions.
@@ -93,15 +108,15 @@ func runTUIOnce(cfg *config.Config, timeoutSec string) (*tui.Session, int) {
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
-		return nil, 80
+		return nil, 80, false
 	}
 
 	fm, ok := finalModel.(tui.Model)
 	if !ok {
-		return nil, 80
+		return nil, 80, false
 	}
 
-	return fm.WarpTarget(), fm.Width()
+	return fm.WarpTarget(), fm.Width(), fm.ConfigChanged()
 }
 
 // scanAndSend runs the scanner and sends results to the TUI, injecting

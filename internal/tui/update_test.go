@@ -4,6 +4,9 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/clintecker/muxwarp/internal/config"
+	"github.com/clintecker/muxwarp/internal/tui/editor"
 )
 
 // newTestModel creates a Model with a set window size for testing.
@@ -403,5 +406,105 @@ func TestUnknownMsg_NoOp(t *testing.T) {
 	// Model should be unchanged.
 	if rm.scanning != m.scanning {
 		t.Error("unknown message should not change model state")
+	}
+}
+
+func TestKeyA_EntersEditMode(t *testing.T) {
+	m := newTestModelWithSessions()
+	m.config = &config.Config{Hosts: []config.HostEntry{{Target: "alpha"}}}
+
+	newM, cmd := m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	rm := newM.(Model)
+
+	if rm.mode != ModeEdit {
+		t.Errorf("mode = %d, want ModeEdit (%d)", rm.mode, ModeEdit)
+	}
+	if cmd == nil {
+		t.Error("pressing 'a' should return editor.Init command")
+	}
+}
+
+func TestKeyA_NoConfigNoOp(t *testing.T) {
+	m := newTestModelWithSessions()
+	// No config set.
+
+	newM, cmd := m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	rm := newM.(Model)
+
+	if rm.mode != ModeList {
+		t.Errorf("mode should stay ModeList without config, got %d", rm.mode)
+	}
+	if cmd != nil {
+		t.Error("pressing 'a' without config should not produce a command")
+	}
+}
+
+func TestKeyE_EntersEditModeForHost(t *testing.T) {
+	m := newTestModelWithSessions()
+	m.config = &config.Config{
+		Hosts: []config.HostEntry{
+			{Target: "alpha"},
+			{Target: "beta"},
+		},
+	}
+	// Cursor is at 0; after sorting, first session is from "alpha".
+	newM, cmd := m.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
+	rm := newM.(Model)
+
+	if rm.mode != ModeEdit {
+		t.Errorf("mode = %d, want ModeEdit (%d)", rm.mode, ModeEdit)
+	}
+	if cmd == nil {
+		t.Error("pressing 'e' should return editor.Init command")
+	}
+}
+
+func TestKeyD_StartsDeleteConfirm(t *testing.T) {
+	m := newTestModelWithSessions()
+	m.config = &config.Config{
+		Hosts: []config.HostEntry{{Target: "alpha"}, {Target: "beta"}},
+	}
+
+	newM, cmd := m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	rm := newM.(Model)
+
+	if rm.confirmDeleteTarget == "" {
+		t.Error("pressing 'd' should set confirmDeleteTarget")
+	}
+	if cmd != nil {
+		t.Error("pressing 'd' should not produce a command yet")
+	}
+}
+
+func TestDeleteConfirm_N_Cancels(t *testing.T) {
+	m := newTestModelWithSessions()
+	m.config = &config.Config{
+		Hosts: []config.HostEntry{{Target: "alpha"}, {Target: "beta"}},
+	}
+	m.confirmDeleteTarget = "alpha"
+
+	newM, cmd := m.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
+	rm := newM.(Model)
+
+	if rm.confirmDeleteTarget != "" {
+		t.Error("pressing 'n' should clear confirmDeleteTarget")
+	}
+	if cmd != nil {
+		t.Error("canceling delete should not produce a command")
+	}
+	if len(rm.config.Hosts) != 2 {
+		t.Error("canceling delete should not modify hosts")
+	}
+}
+
+func TestEditorCanceled_ReturnsToList(t *testing.T) {
+	m := newTestModelWithSessions()
+	m.mode = ModeEdit
+
+	newM, _ := m.Update(editor.EditorCanceledMsg{})
+	rm := newM.(Model)
+
+	if rm.mode != ModeList {
+		t.Errorf("mode = %d, want ModeList after cancel", rm.mode)
 	}
 }

@@ -8,6 +8,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/clintecker/muxwarp/internal/config"
+	"github.com/clintecker/muxwarp/internal/sshconfig"
+	"github.com/clintecker/muxwarp/internal/tui/editor"
 )
 
 // Mode represents the current TUI screen.
@@ -63,10 +65,14 @@ type Model struct {
 	selectedKey string             // stable selection tracking across filter changes
 	matchInfo   map[string]matchInfo // fuzzy highlight indexes keyed by Session.Key()
 	viewOffset  int                // first visible row in the scrolling list
-	configPath  string             // path to the config file
-	config      *config.Config     // in-memory config (for editor saves)
-	toastText   string             // toast notification text
-	toastExpiry time.Time          // when the toast should disappear
+	configPath          string             // path to the config file
+	config              *config.Config     // in-memory config (for editor saves)
+	toastText           string             // toast notification text
+	toastExpiry         time.Time          // when the toast should disappear
+	editor              editor.Model       // config editor sub-model
+	sshHosts            []sshconfig.Host   // parsed SSH config hosts
+	configChanged       bool               // set after editor save/delete
+	confirmDeleteTarget string             // host target pending delete confirmation
 }
 
 // SessionBatchMsg delivers a batch of sessions from one host.
@@ -132,6 +138,28 @@ func (m *Model) SetConfig(cfg *config.Config, path string) {
 
 // GetMode returns the current TUI mode.
 func (m Model) GetMode() Mode { return m.mode }
+
+// SetSSHHosts stores parsed SSH config hosts for editor autocomplete.
+func (m *Model) SetSSHHosts(hosts []sshconfig.Host) {
+	m.sshHosts = hosts
+}
+
+// ConfigChanged returns true if the config was modified (save/delete).
+func (m Model) ConfigChanged() bool { return m.configChanged }
+
+// findHostEntry returns the config entry and index for the currently selected session's host.
+func (m Model) findHostEntry() (config.HostEntry, int, bool) {
+	if m.config == nil || len(m.filtered) == 0 || m.cursor < 0 || m.cursor >= len(m.filtered) {
+		return config.HostEntry{}, -1, false
+	}
+	target := m.filtered[m.cursor].Host
+	for i, h := range m.config.Hosts {
+		if h.Target == target {
+			return h, i, true
+		}
+	}
+	return config.HostEntry{}, -1, false
+}
 
 // sortSessions sorts sessions: IDLE (Attached==0) first, then LIVE,
 // then alphabetically by host then name within each group.
