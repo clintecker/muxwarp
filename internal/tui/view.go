@@ -15,6 +15,8 @@ func (m Model) View() tea.View {
 	switch m.mode {
 	case ModeEdit:
 		content = m.renderEditorScreen()
+	case ModeWizard:
+		content = m.renderWizardScreen()
 	default:
 		content = m.renderListScreen()
 	}
@@ -56,6 +58,16 @@ func (m Model) renderEditorScreen() string {
 	b.WriteRune('\n')
 	b.WriteRune('\n')
 	b.WriteString(m.editor.View())
+	return b.String()
+}
+
+// renderWizardScreen renders the first-run wizard screen.
+func (m Model) renderWizardScreen() string {
+	var b strings.Builder
+	b.WriteString(m.renderHeader())
+	b.WriteRune('\n')
+	b.WriteRune('\n')
+	b.WriteString(m.wizard.View())
 	return b.String()
 }
 

@@ -508,3 +508,56 @@ func TestEditorCanceled_ReturnsToList(t *testing.T) {
 		t.Errorf("mode = %d, want ModeList after cancel", rm.mode)
 	}
 }
+
+func TestWizardSaved_SetsConfigAndQuits(t *testing.T) {
+	m := NewModel(0)
+	m.mode = ModeWizard
+
+	cfg := config.Config{
+		Defaults: config.Defaults{Timeout: "3s", Term: "xterm-256color"},
+		Hosts:    []config.HostEntry{{Target: "alice@atlas"}},
+	}
+
+	newM, cmd := m.Update(editor.WizardSavedMsg{Config: cfg})
+	rm := newM.(Model)
+
+	if rm.WizardConfig() == nil {
+		t.Fatal("WizardConfig should be set after WizardSavedMsg")
+	}
+	if rm.WizardConfig().Hosts[0].Target != "alice@atlas" {
+		t.Errorf("target = %q, want %q", rm.WizardConfig().Hosts[0].Target, "alice@atlas")
+	}
+	if cmd == nil {
+		t.Error("WizardSavedMsg should return tea.Quit")
+	}
+}
+
+func TestWizardQuit_Quits(t *testing.T) {
+	m := NewModel(0)
+	m.mode = ModeWizard
+
+	newM, cmd := m.Update(editor.WizardQuitMsg{})
+	rm := newM.(Model)
+
+	if rm.WizardConfig() != nil {
+		t.Error("WizardConfig should be nil after WizardQuitMsg")
+	}
+	if cmd == nil {
+		t.Error("WizardQuitMsg should return tea.Quit")
+	}
+}
+
+func TestWizardMode_DelegatesToWizard(t *testing.T) {
+	m := NewModel(0)
+	m.SetWizardMode()
+
+	if m.mode != ModeWizard {
+		t.Fatalf("mode = %d, want ModeWizard", m.mode)
+	}
+
+	// Init should return wizard's focus command.
+	cmd := m.Init()
+	if cmd == nil {
+		t.Error("Init in wizard mode should return focus command")
+	}
+}

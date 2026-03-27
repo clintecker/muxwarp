@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -32,9 +33,16 @@ func main() {
 
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n\nExample config (%s):\n\n%s",
-			err, config.DefaultPath(), config.ExampleConfig())
-		os.Exit(1)
+		if errors.Is(err, os.ErrNotExist) {
+			cfg = runWizard()
+			if cfg == nil {
+				return
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "Error: %v\n\nExample config (%s):\n\n%s",
+				err, config.DefaultPath(), config.ExampleConfig())
+			os.Exit(1)
+		}
 	}
 
 	timeoutSec := parseTimeoutSec(cfg.Defaults.Timeout)
@@ -302,6 +310,38 @@ func scannerToTUI(sessions []scanner.Session) []tui.Session {
 		}
 	}
 	return result
+}
+
+// runWizard runs the first-run wizard TUI and returns the created config,
+// or nil if the user quit.
+func runWizard() *config.Config {
+	m := tui.NewModel(0)
+	m.SetSSHHosts(sshconfig.ParseHosts())
+	m.SetWizardMode()
+	p := tea.NewProgram(m)
+
+	finalModel, err := p.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
+		return nil
+	}
+
+	fm, ok := finalModel.(tui.Model)
+	if !ok {
+		return nil
+	}
+
+	cfg := fm.WizardConfig()
+	if cfg == nil {
+		return nil
+	}
+
+	if err := config.Save(cfg, config.DefaultPath()); err != nil {
+		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
+		return nil
+	}
+
+	return cfg
 }
 
 // parseTimeoutSec parses a duration string (e.g. "3s") and returns the

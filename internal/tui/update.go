@@ -16,8 +16,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		if m.mode == ModeEdit {
+		switch m.mode {
+		case ModeEdit:
 			m.editor.Resize(msg.Width, msg.Height)
+		case ModeWizard:
+			m.wizard.WizardResize(msg.Width, msg.Height)
 		}
 		m.ensureViewport()
 		return m, nil
@@ -28,6 +31,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editor.EditorCanceledMsg:
 		m.mode = ModeList
 		return m, nil
+
+	case editor.WizardSavedMsg:
+		m.wizardConfig = &msg.Config
+		return m, tea.Quit
+
+	case editor.WizardQuitMsg:
+		return m, tea.Quit
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -45,9 +55,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Forward other messages (cursor blink, etc.) to editor in edit mode.
-	if m.mode == ModeEdit {
+	// Forward other messages (cursor blink, etc.) to sub-models.
+	switch m.mode {
+	case ModeEdit:
 		return m.updateEditor(msg)
+	case ModeWizard:
+		return m.updateWizard(msg)
 	}
 
 	return m, nil
@@ -63,9 +76,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	// Delegate to editor in edit mode.
-	if m.mode == ModeEdit {
+	// Delegate to sub-models by mode.
+	switch m.mode {
+	case ModeEdit:
 		return m.updateEditor(msg)
+	case ModeWizard:
+		return m.updateWizard(msg)
 	}
 
 	if m.mode == ModeFilter {
@@ -230,6 +246,13 @@ func (m *Model) ensureViewport() {
 func (m Model) updateEditor(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.editor, cmd = m.editor.Update(msg)
+	return m, cmd
+}
+
+// updateWizard delegates a message to the wizard sub-model.
+func (m Model) updateWizard(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	m.wizard, cmd = m.wizard.Update(msg)
 	return m, cmd
 }
 

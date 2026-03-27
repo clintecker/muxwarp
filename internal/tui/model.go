@@ -69,10 +69,12 @@ type Model struct {
 	config              *config.Config     // in-memory config (for editor saves)
 	toastText           string             // toast notification text
 	toastExpiry         time.Time          // when the toast should disappear
-	editor              editor.Model       // config editor sub-model
-	sshHosts            []sshconfig.Host   // parsed SSH config hosts
-	configChanged       bool               // set after editor save/delete
-	confirmDeleteTarget string             // host target pending delete confirmation
+	editor              editor.Model        // config editor sub-model
+	wizard              editor.WizardModel  // first-run wizard sub-model
+	sshHosts            []sshconfig.Host    // parsed SSH config hosts
+	configChanged       bool                // set after editor save/delete
+	confirmDeleteTarget string              // host target pending delete confirmation
+	wizardConfig        *config.Config      // set when wizard completes
 }
 
 // SessionBatchMsg delivers a batch of sessions from one host.
@@ -116,8 +118,11 @@ func NewModelWithSessions(sessions []Session, filter string) Model {
 	return m
 }
 
-// Init implements tea.Model. No startup command needed for now.
+// Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
+	if m.mode == ModeWizard {
+		return m.wizard.Init()
+	}
 	return nil
 }
 
@@ -146,6 +151,15 @@ func (m *Model) SetSSHHosts(hosts []sshconfig.Host) {
 
 // ConfigChanged returns true if the config was modified (save/delete).
 func (m Model) ConfigChanged() bool { return m.configChanged }
+
+// SetWizardMode switches to wizard mode for first-run onboarding.
+func (m *Model) SetWizardMode() {
+	m.mode = ModeWizard
+	m.wizard = editor.NewWizard(m.sshHosts, m.width, m.height)
+}
+
+// WizardConfig returns the config produced by the wizard, or nil.
+func (m Model) WizardConfig() *config.Config { return m.wizardConfig }
 
 // findHostEntry returns the config entry and index for the currently selected session's host.
 func (m Model) findHostEntry() (config.HostEntry, int, bool) {
