@@ -175,6 +175,154 @@ func DefaultPath() string {
 	return filepath.Join(home, ".muxwarp.config.yaml")
 }
 
+// marshalableConfig is the structure used for YAML marshaling with a yaml.Node
+// hosts list to support mixed scalar/mapping output.
+type marshalableConfig struct {
+	Defaults Defaults  `yaml:"defaults"`
+	Hosts    yaml.Node `yaml:"hosts"`
+}
+
+// MarshalYAML implements custom marshaling for Config to produce mixed format:
+// plain scalars for hosts without sessions, mapping nodes for hosts with sessions.
+func (c Config) MarshalYAML() (interface{}, error) {
+	hostsSeq := yaml.Node{
+		Kind: yaml.SequenceNode,
+		Tag:  "!!seq",
+	}
+
+	for _, h := range c.Hosts {
+		node, err := marshalHostEntry(h)
+		if err != nil {
+			return nil, err
+		}
+		hostsSeq.Content = append(hostsSeq.Content, &node)
+	}
+
+	return &marshalableConfig{
+		Defaults: c.Defaults,
+		Hosts:    hostsSeq,
+	}, nil
+}
+
+// marshalHostEntry marshals a single HostEntry as either a scalar or mapping node.
+func marshalHostEntry(h HostEntry) (yaml.Node, error) {
+	if len(h.Sessions) == 0 {
+		return marshalScalarHost(h.Target), nil
+	}
+	return marshalMappingHost(h)
+}
+
+// marshalScalarHost returns a yaml.ScalarNode with the target string.
+func marshalScalarHost(target string) yaml.Node {
+	return yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Tag:   "!!str",
+		Value: target,
+	}
+}
+
+// marshalMappingHost encodes a HostEntry with sessions as a yaml.MappingNode.
+func marshalMappingHost(h HostEntry) (yaml.Node, error) {
+	mapping := yaml.Node{
+		Kind: yaml.MappingNode,
+		Tag:  "!!map",
+	}
+
+	// Add "target" key-value pair.
+	mapping.Content = append(mapping.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "target"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: h.Target},
+	)
+
+	// Add "sessions" key and sequence value.
+	sessionsSeq := yaml.Node{
+		Kind: yaml.SequenceNode,
+		Tag:  "!!seq",
+	}
+	for _, ds := range h.Sessions {
+		sessionMap := yaml.Node{
+			Kind: yaml.MappingNode,
+			Tag:  "!!map",
+		}
+		// name (always present)
+		sessionMap.Content = append(sessionMap.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "name"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Name},
+		)
+		// dir (optional)
+		if ds.Dir != "" {
+			sessionMap.Content = append(sessionMap.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "dir"},
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Dir},
+			)
+		}
+		// cmd (optional)
+		if ds.Cmd != "" {
+			sessionMap.Content = append(sessionMap.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "cmd"},
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Cmd},
+			)
+		}
+		sessionsSeq.Content = append(sessionsSeq.Content, &sessionMap)
+	}
+
+	mapping.Content = append(mapping.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "sessions"},
+		&sessionsSeq,
+	)
+
+	return mapping, nil
+}
+
+// Save marshals the config to YAML and writes it atomically to the given path.
+func Save(cfg *Config, path string) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshaling config: %w", err)
+	}
+	return writeAtomic(path, data)
+}
+
+// writeAtomic writes data to a temporary file in the same directory as path,
+// then renames it over the target to ensure atomic replacement.
+func writeAtomic(path string, data []byte) error {
+	dir := filepath.Dir(path)
+
+	tmp, err := os.CreateTemp(dir, ".muxwarp-config-*.yaml")
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+
+	// Clean up the temp file on any error path.
+	defer func() {
+		if tmpName != "" {
+			os.Remove(tmpName)
+		}
+	}()
+
+	if err := os.Chmod(tmpName, 0o600); err != nil {
+		tmp.Close()
+		return fmt.Errorf("setting file permissions: %w", err)
+	}
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("writing temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("closing temp file: %w", err)
+	}
+
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("renaming temp file: %w", err)
+	}
+
+	// Rename succeeded; clear tmpName so defer doesn't remove the final file.
+	tmpName = ""
+	return nil
+}
+
 // ExampleConfig returns an example YAML configuration string for friendly error messages.
 func ExampleConfig() string {
 	return `# ~/.muxwarp.config.yaml

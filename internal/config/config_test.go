@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // TestLoad_Minimal tests loading a config with just hosts, verifying defaults are applied.
@@ -287,4 +289,190 @@ func TestExampleConfig(t *testing.T) {
 	if !strings.Contains(ex, "defaults") {
 		t.Error("ExampleConfig() should contain 'defaults'")
 	}
+}
+
+// --- Serialization tests ---
+
+// TestSave_RoundTrip creates a Config with mixed hosts, saves it, loads it back,
+// and verifies all fields survive the round trip.
+func TestSave_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "roundtrip.yaml")
+
+	original := &Config{
+		Defaults: Defaults{
+			Timeout: "5s",
+			Term:    "screen-256color",
+		},
+		Hosts: []HostEntry{
+			{Target: "alice@atlas"},
+			{
+				Target: "alice@forge",
+				Sessions: []DesiredSession{
+					{Name: "api-server", Dir: "~/code/api"},
+					{Name: "web-dev", Dir: "~/code/web", Cmd: "nvim"},
+				},
+			},
+			{Target: "bob@neptune"},
+		},
+	}
+
+	if err := Save(original, cfgPath); err != nil {
+		t.Fatalf("Save() error: %v", err)
+	}
+
+	loaded, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error after Save: %v", err)
+	}
+
+	// Verify defaults.
+	assertString(t, "defaults.timeout", loaded.Defaults.Timeout, "5s")
+	assertString(t, "defaults.term", loaded.Defaults.Term, "screen-256color")
+
+	// Verify hosts count.
+	if len(loaded.Hosts) != 3 {
+		t.Fatalf("expected 3 hosts, got %d", len(loaded.Hosts))
+	}
+
+	// Verify plain hosts.
+	assertString(t, "hosts[0].Target", loaded.Hosts[0].Target, "alice@atlas")
+	if len(loaded.Hosts[0].Sessions) != 0 {
+		t.Errorf("expected 0 sessions for hosts[0], got %d", len(loaded.Hosts[0].Sessions))
+	}
+
+	// Verify mapping host with sessions.
+	assertString(t, "hosts[1].Target", loaded.Hosts[1].Target, "alice@forge")
+	if len(loaded.Hosts[1].Sessions) != 2 {
+		t.Fatalf("expected 2 sessions for hosts[1], got %d", len(loaded.Hosts[1].Sessions))
+	}
+	assertString(t, "hosts[1].sessions[0].Name", loaded.Hosts[1].Sessions[0].Name, "api-server")
+	assertString(t, "hosts[1].sessions[0].Dir", loaded.Hosts[1].Sessions[0].Dir, "~/code/api")
+	assertString(t, "hosts[1].sessions[0].Cmd", loaded.Hosts[1].Sessions[0].Cmd, "")
+	assertString(t, "hosts[1].sessions[1].Name", loaded.Hosts[1].Sessions[1].Name, "web-dev")
+	assertString(t, "hosts[1].sessions[1].Dir", loaded.Hosts[1].Sessions[1].Dir, "~/code/web")
+	assertString(t, "hosts[1].sessions[1].Cmd", loaded.Hosts[1].Sessions[1].Cmd, "nvim")
+
+	// Verify trailing plain host.
+	assertString(t, "hosts[2].Target", loaded.Hosts[2].Target, "bob@neptune")
+	if len(loaded.Hosts[2].Sessions) != 0 {
+		t.Errorf("expected 0 sessions for hosts[2], got %d", len(loaded.Hosts[2].Sessions))
+	}
+}
+
+// TestMarshalYAML_MixedHosts verifies the raw YAML output contains both plain
+// scalar strings and mapping objects for hosts with sessions.
+func TestMarshalYAML_MixedHosts(t *testing.T) {
+	cfg := Config{
+		Defaults: Defaults{Timeout: "3s", Term: "xterm-256color"},
+		Hosts: []HostEntry{
+			{Target: "alice@atlas"},
+			{
+				Target: "alice@forge",
+				Sessions: []DesiredSession{
+					{Name: "api-server", Dir: "~/code/api"},
+				},
+			},
+		},
+	}
+
+	data, err := yaml.Marshal(&cfg)
+	if err != nil {
+		t.Fatalf("yaml.Marshal() error: %v", err)
+	}
+
+	raw := string(data)
+
+	// The plain host should appear as a bare scalar in the YAML list.
+	if !strings.Contains(raw, "- alice@atlas") {
+		t.Errorf("expected plain scalar '- alice@atlas' in output:\n%s", raw)
+	}
+
+	// The mapping host should have a target key.
+	if !strings.Contains(raw, "target: alice@forge") {
+		t.Errorf("expected 'target: alice@forge' in output:\n%s", raw)
+	}
+
+	// Sessions should appear under the mapping host.
+	if !strings.Contains(raw, "name: api-server") {
+		t.Errorf("expected 'name: api-server' in output:\n%s", raw)
+	}
+	if !strings.Contains(raw, "dir: ~/code/api") {
+		t.Errorf("expected 'dir: ~/code/api' in output:\n%s", raw)
+	}
+}
+
+// TestMarshalYAML_PlainOnly verifies that a config with only plain hosts
+// (no sessions) produces a simple YAML list of strings.
+func TestMarshalYAML_PlainOnly(t *testing.T) {
+	cfg := Config{
+		Defaults: Defaults{Timeout: "3s", Term: "xterm-256color"},
+		Hosts: []HostEntry{
+			{Target: "server1"},
+			{Target: "server2"},
+			{Target: "server3"},
+		},
+	}
+
+	data, err := yaml.Marshal(&cfg)
+	if err != nil {
+		t.Fatalf("yaml.Marshal() error: %v", err)
+	}
+
+	raw := string(data)
+
+	// All hosts should be plain scalars.
+	if !strings.Contains(raw, "- server1") {
+		t.Errorf("expected '- server1' in output:\n%s", raw)
+	}
+	if !strings.Contains(raw, "- server2") {
+		t.Errorf("expected '- server2' in output:\n%s", raw)
+	}
+	if !strings.Contains(raw, "- server3") {
+		t.Errorf("expected '- server3' in output:\n%s", raw)
+	}
+
+	// Should not contain "target:" since no hosts have sessions.
+	if strings.Contains(raw, "target:") {
+		t.Errorf("expected no 'target:' key for plain-only hosts, but found one:\n%s", raw)
+	}
+}
+
+// TestSave_CreatesNewFile verifies that Save creates a new file at a path
+// that doesn't exist yet, and the file can be loaded back successfully.
+func TestSave_CreatesNewFile(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "subdir", "new-config.yaml")
+
+	// Create the parent directory so writeAtomic can place the temp file.
+	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &Config{
+		Defaults: Defaults{Timeout: "3s", Term: "xterm-256color"},
+		Hosts: []HostEntry{
+			{Target: "server1"},
+		},
+	}
+
+	if err := Save(cfg, cfgPath); err != nil {
+		t.Fatalf("Save() error: %v", err)
+	}
+
+	// Verify the file was created.
+	info, err := os.Stat(cfgPath)
+	if err != nil {
+		t.Fatalf("file not created: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("expected file permissions 0600, got %o", info.Mode().Perm())
+	}
+
+	// Verify it can be loaded back.
+	loaded, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error after Save: %v", err)
+	}
+	assertString(t, "hosts[0].Target", loaded.Hosts[0].Target, "server1")
 }
