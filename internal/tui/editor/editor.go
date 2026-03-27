@@ -336,6 +336,7 @@ func (m *Model) deleteSession() {
 		m.nameInput.SetValue("")
 		m.dirInput.SetValue("")
 		m.cmdInput.SetValue("")
+		m.focusField(FocusHost)
 	}
 }
 
