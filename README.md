@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="muxwarp.png" alt="muxwarp logo" width="500">
+</p>
+
 # muxwarp
 
 [![CI](https://github.com/clintecker/muxwarp/actions/workflows/ci.yml/badge.svg)](https://github.com/clintecker/muxwarp/actions/workflows/ci.yml)
