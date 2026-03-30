@@ -4,3 +4,4 @@ dist/
 *.log
 /muxwarp
 coverage.out
+.worktrees/
