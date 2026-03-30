@@ -237,7 +237,21 @@ func directWarp(cfg *config.Config, timeoutSec, pattern string) {
 	logging.Log().Info("direct warp", "pattern", pattern)
 	fmt.Fprintf(os.Stderr, "Scanning gates...\n")
 
+	allSessions := scanAllWithTags(cfg, timeoutSec)
+	allSessions = append(allSessions, buildGhosts(cfg, allSessions)...)
+
+	if len(allSessions) == 0 {
+		fmt.Fprintf(os.Stderr, "No sessions found on any host.\n")
+		os.Exit(1)
+	}
+
+	dispatchWarp(cfg, allSessions, pattern, timeoutSec)
+}
+
+// scanAllWithTags scans all hosts and attaches config tags to results.
+func scanAllWithTags(cfg *config.Config, timeoutSec string) []tui.Session {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	var allSessions []tui.Session
 	_ = scanner.ScanAll(ctx, cfg.HostTargets(), 8, timeoutSec, func(host string, sessions []scanner.Session) {
@@ -248,15 +262,11 @@ func directWarp(cfg *config.Config, timeoutSec, pattern string) {
 		}
 		allSessions = append(allSessions, batch...)
 	})
-	cancel()
+	return allSessions
+}
 
-	allSessions = append(allSessions, buildGhosts(cfg, allSessions)...)
-
-	if len(allSessions) == 0 {
-		fmt.Fprintf(os.Stderr, "No sessions found on any host.\n")
-		os.Exit(1)
-	}
-
+// dispatchWarp fuzzy-matches and warps to the best match.
+func dispatchWarp(cfg *config.Config, allSessions []tui.Session, pattern, timeoutSec string) {
 	matches := fuzzyMatch(pattern, allSessions)
 
 	switch len(matches) {
@@ -265,7 +275,6 @@ func directWarp(cfg *config.Config, timeoutSec, pattern string) {
 		os.Exit(1)
 
 	case 1:
-		// Single match: exec-replace (no list to return to).
 		warp(cfg, &matches[0])
 
 	default:

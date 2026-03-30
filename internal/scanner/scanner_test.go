@@ -206,6 +206,16 @@ func assertHostCount(t *testing.T, collected map[string][]Session, host string, 
 	}
 }
 
+func assertSessionTimestamps(t *testing.T, s Session, wantCreated, wantActivity int64) {
+	t.Helper()
+	if s.Created != wantCreated {
+		t.Errorf("Created = %d, want %d", s.Created, wantCreated)
+	}
+	if s.LastActivity != wantActivity {
+		t.Errorf("LastActivity = %d, want %d", s.LastActivity, wantActivity)
+	}
+}
+
 func TestScanHost_WithTimestamps(t *testing.T) {
 	withFakeSSH(t, `#!/bin/sh
 printf 'dev\t1\t3\t1711756800\t1711843100\n'
@@ -219,22 +229,8 @@ printf 'build\t0\t1\t1711670400\t1711756700\n'
 	if len(sessions) != 2 {
 		t.Fatalf("got %d sessions, want 2", len(sessions))
 	}
-	t.Run("timestamps_parsed", func(t *testing.T) {
-		if sessions[0].Created != 1711756800 {
-			t.Errorf("Created = %d, want 1711756800", sessions[0].Created)
-		}
-		if sessions[0].LastActivity != 1711843100 {
-			t.Errorf("LastActivity = %d, want 1711843100", sessions[0].LastActivity)
-		}
-	})
-	t.Run("second_session_timestamps", func(t *testing.T) {
-		if sessions[1].Created != 1711670400 {
-			t.Errorf("Created = %d, want 1711670400", sessions[1].Created)
-		}
-		if sessions[1].LastActivity != 1711756700 {
-			t.Errorf("LastActivity = %d, want 1711756700", sessions[1].LastActivity)
-		}
-	})
+	assertSessionTimestamps(t, sessions[0], 1711756800, 1711843100)
+	assertSessionTimestamps(t, sessions[1], 1711670400, 1711756700)
 }
 
 func TestScanHost_MissingTimestamps(t *testing.T) {
