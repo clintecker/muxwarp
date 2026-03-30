@@ -540,6 +540,80 @@ func TestMarshalYAML_PlainOnly(t *testing.T) {
 	}
 }
 
+func loadTagsConfig(t *testing.T) *Config {
+	t.Helper()
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	content := []byte(`hosts:
+  - target: clint@indigo
+    tags: [prod, api]
+    sessions:
+      - name: dev
+  - target: deploy@atlas
+    tags: [staging]
+  - server3
+`)
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
+	return cfg
+}
+
+func TestLoad_WithTags_MultipleTagsOnHost(t *testing.T) {
+	cfg := loadTagsConfig(t)
+	if len(cfg.Hosts[0].Tags) != 2 {
+		t.Fatalf("expected 2 tags, got %d", len(cfg.Hosts[0].Tags))
+	}
+	assertString(t, "tag[0]", cfg.Hosts[0].Tags[0], "prod")
+	assertString(t, "tag[1]", cfg.Hosts[0].Tags[1], "api")
+}
+
+func TestLoad_WithTags_SingleTagOnHost(t *testing.T) {
+	cfg := loadTagsConfig(t)
+	if len(cfg.Hosts[1].Tags) != 1 {
+		t.Fatalf("expected 1 tag, got %d", len(cfg.Hosts[1].Tags))
+	}
+	assertString(t, "tag[0]", cfg.Hosts[1].Tags[0], "staging")
+}
+
+func TestLoad_WithTags_NoTagsOnHost(t *testing.T) {
+	cfg := loadTagsConfig(t)
+	if len(cfg.Hosts[2].Tags) != 0 {
+		t.Errorf("expected 0 tags, got %d", len(cfg.Hosts[2].Tags))
+	}
+}
+
+func TestSave_RoundTrip_WithTags(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "roundtrip-tags.yaml")
+	original := &Config{
+		Defaults: Defaults{Timeout: "3s", Term: "xterm-256color"},
+		Hosts: []HostEntry{
+			{Target: "alice@atlas", Tags: []string{"prod", "api"}},
+			{Target: "bob@neptune"},
+		},
+	}
+	if err := Save(original, cfgPath); err != nil {
+		t.Fatalf("Save() error: %v", err)
+	}
+	loaded, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if len(loaded.Hosts[0].Tags) != 2 {
+		t.Fatalf("expected 2 tags after round-trip, got %d", len(loaded.Hosts[0].Tags))
+	}
+	assertString(t, "tags[0]", loaded.Hosts[0].Tags[0], "prod")
+	assertString(t, "tags[1]", loaded.Hosts[0].Tags[1], "api")
+	if len(loaded.Hosts[1].Tags) != 0 {
+		t.Errorf("expected 0 tags for untagged host, got %d", len(loaded.Hosts[1].Tags))
+	}
+}
+
 // TestSave_CreatesNewFile verifies that Save creates a new file at a path
 // that doesn't exist yet, and the file can be loaded back successfully.
 func TestSave_CreatesNewFile(t *testing.T) {

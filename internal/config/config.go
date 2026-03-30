@@ -23,6 +23,7 @@ type DesiredSession struct {
 // a plain string (backward compat) or as an object with optional desired sessions.
 type HostEntry struct {
 	Target   string           `yaml:"target"`
+	Tags     []string         `yaml:"tags,omitempty"`
 	Sessions []DesiredSession `yaml:"sessions,omitempty"`
 }
 
@@ -217,7 +218,7 @@ func (c Config) MarshalYAML() (interface{}, error) {
 
 // marshalHostEntry marshals a single HostEntry as either a scalar or mapping node.
 func marshalHostEntry(h HostEntry) (yaml.Node, error) {
-	if len(h.Sessions) == 0 {
+	if len(h.Sessions) == 0 && len(h.Tags) == 0 {
 		return marshalScalarHost(h.Target), nil
 	}
 	return marshalMappingHost(h)
@@ -232,7 +233,7 @@ func marshalScalarHost(target string) yaml.Node {
 	}
 }
 
-// marshalMappingHost encodes a HostEntry with sessions as a yaml.MappingNode.
+// marshalMappingHost encodes a HostEntry with tags and/or sessions as a yaml.MappingNode.
 func marshalMappingHost(h HostEntry) (yaml.Node, error) {
 	mapping := yaml.Node{
 		Kind: yaml.MappingNode,
@@ -245,51 +246,82 @@ func marshalMappingHost(h HostEntry) (yaml.Node, error) {
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: h.Target},
 	)
 
-	// Add "sessions" key and sequence value.
+	// Add "tags" as a flow-style sequence if present.
+	if len(h.Tags) > 0 {
+		tagsSeq := yaml.Node{
+			Kind:  yaml.SequenceNode,
+			Tag:   "!!seq",
+			Style: yaml.FlowStyle,
+		}
+		for _, tag := range h.Tags {
+			tagsSeq.Content = append(tagsSeq.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: tag},
+			)
+		}
+		mapping.Content = append(mapping.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "tags"},
+			&tagsSeq,
+		)
+	}
+
+	// Add "sessions" key and sequence value, if sessions are present.
+	if len(h.Sessions) > 0 {
+		sessionsSeq := marshalSessions(h.Sessions)
+		mapping.Content = append(mapping.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "sessions"},
+			&sessionsSeq,
+		)
+	}
+
+	return mapping, nil
+}
+
+// marshalSessions encodes a slice of DesiredSession as a yaml.SequenceNode.
+func marshalSessions(sessions []DesiredSession) yaml.Node {
 	sessionsSeq := yaml.Node{
 		Kind: yaml.SequenceNode,
 		Tag:  "!!seq",
 	}
-	for _, ds := range h.Sessions {
-		sessionMap := yaml.Node{
-			Kind: yaml.MappingNode,
-			Tag:  "!!map",
-		}
-		// name (always present)
-		sessionMap.Content = append(sessionMap.Content,
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "name"},
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Name},
-		)
-		// dir (optional)
-		if ds.Dir != "" {
-			sessionMap.Content = append(sessionMap.Content,
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "dir"},
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Dir},
-			)
-		}
-		// repo (optional)
-		if ds.Repo != "" {
-			sessionMap.Content = append(sessionMap.Content,
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "repo"},
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Repo},
-			)
-		}
-		// cmd (optional)
-		if ds.Cmd != "" {
-			sessionMap.Content = append(sessionMap.Content,
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "cmd"},
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Cmd},
-			)
-		}
+	for _, ds := range sessions {
+		sessionMap := marshalSession(ds)
 		sessionsSeq.Content = append(sessionsSeq.Content, &sessionMap)
 	}
+	return sessionsSeq
+}
 
-	mapping.Content = append(mapping.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "sessions"},
-		&sessionsSeq,
+// marshalSession encodes a single DesiredSession as a yaml.MappingNode.
+func marshalSession(ds DesiredSession) yaml.Node {
+	sessionMap := yaml.Node{
+		Kind: yaml.MappingNode,
+		Tag:  "!!map",
+	}
+	// name (always present)
+	sessionMap.Content = append(sessionMap.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "name"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Name},
 	)
-
-	return mapping, nil
+	// dir (optional)
+	if ds.Dir != "" {
+		sessionMap.Content = append(sessionMap.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "dir"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Dir},
+		)
+	}
+	// repo (optional)
+	if ds.Repo != "" {
+		sessionMap.Content = append(sessionMap.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "repo"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Repo},
+		)
+	}
+	// cmd (optional)
+	if ds.Cmd != "" {
+		sessionMap.Content = append(sessionMap.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "cmd"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Cmd},
+		)
+	}
+	return sessionMap
 }
 
 // Save marshals the config to YAML and writes it atomically to the given path.
