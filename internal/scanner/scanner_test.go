@@ -205,3 +205,54 @@ func assertHostCount(t *testing.T, collected map[string][]Session, host string, 
 		t.Errorf("%s: got %d sessions, want %d", host, len(collected[host]), want)
 	}
 }
+
+func TestScanHost_WithTimestamps(t *testing.T) {
+	withFakeSSH(t, `#!/bin/sh
+printf 'dev\t1\t3\t1711756800\t1711843100\n'
+printf 'build\t0\t1\t1711670400\t1711756700\n'
+`)
+	ctx := context.Background()
+	sessions, err := ScanHost(ctx, "clint@indigo", "3")
+	if err != nil {
+		t.Fatalf("ScanHost returned error: %v", err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("got %d sessions, want 2", len(sessions))
+	}
+	t.Run("timestamps_parsed", func(t *testing.T) {
+		if sessions[0].Created != 1711756800 {
+			t.Errorf("Created = %d, want 1711756800", sessions[0].Created)
+		}
+		if sessions[0].LastActivity != 1711843100 {
+			t.Errorf("LastActivity = %d, want 1711843100", sessions[0].LastActivity)
+		}
+	})
+	t.Run("second_session_timestamps", func(t *testing.T) {
+		if sessions[1].Created != 1711670400 {
+			t.Errorf("Created = %d, want 1711670400", sessions[1].Created)
+		}
+		if sessions[1].LastActivity != 1711756700 {
+			t.Errorf("LastActivity = %d, want 1711756700", sessions[1].LastActivity)
+		}
+	})
+}
+
+func TestScanHost_MissingTimestamps(t *testing.T) {
+	withFakeSSH(t, `#!/bin/sh
+printf 'dev\t1\t3\n'
+`)
+	ctx := context.Background()
+	sessions, err := ScanHost(ctx, "clint@indigo", "3")
+	if err != nil {
+		t.Fatalf("ScanHost returned error: %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("got %d sessions, want 1", len(sessions))
+	}
+	if sessions[0].Created != 0 {
+		t.Errorf("Created = %d, want 0 for missing timestamp", sessions[0].Created)
+	}
+	if sessions[0].LastActivity != 0 {
+		t.Errorf("LastActivity = %d, want 0 for missing timestamp", sessions[0].LastActivity)
+	}
+}

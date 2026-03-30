@@ -31,7 +31,7 @@ func BuildAttachArgs(target, term, sessionName string) []string {
 // Produces:
 //
 //	ssh -o ConnectTimeout=<timeoutSec> -o BatchMode=yes <target>
-//	    tmux list-sessions -F '#{session_name}\t#{session_attached}\t#{session_windows}'
+//	    tmux list-sessions -F '#{session_name}\t#{session_attached}\t#{session_windows}\t#{session_created}\t#{session_activity}'
 func BuildScanArgs(target, timeoutSec string) []string {
 	return []string{
 		"ssh",
@@ -39,7 +39,7 @@ func BuildScanArgs(target, timeoutSec string) []string {
 		"-o", "BatchMode=yes",
 		target,
 		"tmux", "list-sessions", "-F",
-		"\"#{session_name}\t#{session_attached}\t#{session_windows}\"",
+		"\"#{session_name}\t#{session_attached}\t#{session_windows}\t#{session_created}\t#{session_activity}\"",
 	}
 }
 
