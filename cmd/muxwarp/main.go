@@ -184,6 +184,16 @@ func runTUIOnce(cfg *config.Config, timeoutSec string) (*tui.Session, int, bool)
 	return fm.WarpTarget(), fm.Width(), fm.ConfigChanged()
 }
 
+// tagsForHost returns the tags configured for the given target host.
+func tagsForHost(cfg *config.Config, target string) []string {
+	for _, h := range cfg.Hosts {
+		if h.Target == target {
+			return h.Tags
+		}
+	}
+	return nil
+}
+
 // scanAndSend injects ghost sessions immediately from config, then scans
 // hosts in the background. As real sessions are found, matching ghosts are
 // removed via PromoteGhostMsg.
@@ -198,6 +208,10 @@ func scanAndSend(ctx context.Context, cfg *config.Config, timeoutSec string, p *
 	logging.Log().Info("scan starting", "hosts", len(cfg.Hosts))
 	_ = scanner.ScanAll(ctx, cfg.HostTargets(), 8, timeoutSec, func(host string, sessions []scanner.Session) {
 		batch := scannerToTUI(sessions)
+		tags := tagsForHost(cfg, host)
+		for i := range batch {
+			batch[i].Tags = tags
+		}
 		logging.Log().Debug("scan batch", "host", host, "sessions", len(batch))
 		// Send real sessions; the TUI will promote matching ghosts.
 		p.Send(tui.PromoteGhostMsg{Host: host, Sessions: batch})
@@ -324,7 +338,7 @@ func ghostsForHost(h config.HostEntry, found []tui.Session) []tui.Session {
 		if existing[ds.Name] {
 			continue
 		}
-		ghosts = append(ghosts, newGhostSession(h.Target, ds))
+		ghosts = append(ghosts, newGhostSession(h.Target, h.Tags, ds))
 	}
 	return ghosts
 }
@@ -340,11 +354,12 @@ func existingNames(target string, found []tui.Session) map[string]bool {
 	return names
 }
 
-func newGhostSession(target string, ds config.DesiredSession) tui.Session {
+func newGhostSession(target string, tags []string, ds config.DesiredSession) tui.Session {
 	return tui.Session{
 		Host:      target,
 		HostShort: ssh.HostShort(target),
 		Name:      ds.Name,
+		Tags:      tags,
 		Desired:   &tui.DesiredInfo{Dir: ds.Dir, Repo: ds.Repo, Cmd: ds.Cmd},
 	}
 }

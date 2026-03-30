@@ -47,9 +47,45 @@ func (m Model) renderListScreen() string {
 	}
 
 	b.WriteRune('\n')
-	b.WriteString(m.renderFooter())
+	if m.mode == ModeTagPicker {
+		b.WriteString(m.renderTagPicker())
+	} else {
+		b.WriteString(m.renderFooter())
+	}
 
 	return b.String()
+}
+
+// renderTagPicker renders an inline tag selection picker in the footer area.
+func (m Model) renderTagPicker() string {
+	tags := m.allTags()
+	var b strings.Builder
+	b.WriteString(filterPromptStyle.Render("Select tag:"))
+	b.WriteRune('\n')
+	b.WriteString(renderTagList(tags, m.tagCursor))
+	b.WriteRune('\n')
+	b.WriteString(footerStyle.Render("enter select │ esc cancel"))
+	return b.String()
+}
+
+// renderTagList renders the horizontal list of tags with cursor highlighting.
+func renderTagList(tags []string, cursor int) string {
+	var b strings.Builder
+	for i, tag := range tags {
+		b.WriteString(renderTagItem(tag, i == cursor))
+		if i < len(tags)-1 {
+			b.WriteString("  ")
+		}
+	}
+	return b.String()
+}
+
+// renderTagItem renders a single tag as either selected or unselected.
+func renderTagItem(tag string, selected bool) string {
+	if selected {
+		return selectorStyle.Render("▸ ") + sessionNameStyle.Render(tag)
+	}
+	return "  " + metadataStyle.Render(tag)
 }
 
 // renderEditorScreen renders the config editor screen.
@@ -468,7 +504,13 @@ func (m Model) renderFooter() string {
 		return prompt + hint
 	}
 
-	return footerStyle.Render("enter warp │ / filter │ a add │ e edit │ d delete │ q quit")
+	if m.tagFilter != "" {
+		tagLabel := filterPromptStyle.Render("tag: " + m.tagFilter)
+		countLabel := statusStyle.Render(fmt.Sprintf("%d sessions", len(m.filtered)))
+		return tagLabel + "  " + countLabel + "\n" +
+			footerStyle.Render("t clear │ / filter │ enter warp │ q quit")
+	}
+	return footerStyle.Render("enter warp │ / filter │ t tags │ a add │ e edit │ d delete │ q quit")
 }
 
 // renderEmpty renders the empty state when no sessions are found.

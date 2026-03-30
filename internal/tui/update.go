@@ -41,6 +41,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case tea.KeyPressMsg:
+		if msg.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
 		return m.handleKey(msg)
 
 	case SessionBatchMsg:
@@ -93,20 +96,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
-	// Global keys that work in any mode.
-	if key == "ctrl+c" {
-		return m, tea.Quit
-	}
-
-	// Delegate to sub-models by mode.
+	// Delegate to handler by mode.
 	switch m.mode {
 	case ModeEdit:
 		return m.updateEditor(msg)
 	case ModeWizard:
 		return m.updateWizard(msg)
-	}
-
-	if m.mode == ModeFilter {
+	case ModeTagPicker:
+		return m.handleTagPickerKey(msg, key)
+	case ModeFilter:
 		return m.handleFilterKey(msg, key)
 	}
 	return m.handleNormalKey(key)
@@ -135,6 +133,15 @@ func (m Model) handleNormalAction(key string) (tea.Model, tea.Cmd) {
 		return m.handleEnterFilter()
 	case "r":
 		return m.handleRescan()
+	case "t":
+		return m.handleTagPicker()
+	}
+	return m.handleConfigAction(key)
+}
+
+// handleConfigAction dispatches config-editing keys (add, edit, delete).
+func (m Model) handleConfigAction(key string) (tea.Model, tea.Cmd) {
+	switch key {
 	case "a":
 		return m.handleAddHost()
 	case "e":
@@ -142,6 +149,53 @@ func (m Model) handleNormalAction(key string) (tea.Model, tea.Cmd) {
 	case "d":
 		return m.handleDeleteHost()
 	}
+	return m, nil
+}
+
+// handleTagPicker opens the tag picker, or clears an active tag filter.
+func (m Model) handleTagPicker() (tea.Model, tea.Cmd) {
+	tags := m.allTags()
+	if len(tags) == 0 {
+		return m, nil
+	}
+	if m.tagFilter != "" {
+		m.tagFilter = ""
+		m.applyFilter()
+		m.ensureViewport()
+		return m, nil
+	}
+	m.mode = ModeTagPicker
+	m.tagCursor = 0
+	return m, nil
+}
+
+// handleTagPickerKey processes key events while the tag picker is open.
+func (m Model) handleTagPickerKey(_ tea.KeyPressMsg, key string) (tea.Model, tea.Cmd) {
+	tags := m.allTags()
+	switch key {
+	case "esc", "t":
+		m.mode = ModeList
+		return m, nil
+	case "enter":
+		return m.handleTagPickerEnter(tags)
+	case "up", "k":
+		m.tagCursor = max(m.tagCursor-1, 0)
+		return m, nil
+	case "down", "j":
+		m.tagCursor = min(m.tagCursor+1, len(tags)-1)
+		return m, nil
+	}
+	return m, nil
+}
+
+// handleTagPickerEnter selects the highlighted tag and returns to list mode.
+func (m Model) handleTagPickerEnter(tags []string) (tea.Model, tea.Cmd) {
+	if m.tagCursor >= 0 && m.tagCursor < len(tags) {
+		m.tagFilter = tags[m.tagCursor]
+		m.applyFilter()
+		m.ensureViewport()
+	}
+	m.mode = ModeList
 	return m, nil
 }
 

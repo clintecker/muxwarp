@@ -16,10 +16,11 @@ import (
 type Mode int
 
 const (
-	ModeList   Mode = iota // default session list
-	ModeFilter             // filter input active
-	ModeEdit               // config editor
-	ModeWizard             // first-run wizard
+	ModeList      Mode = iota // default session list
+	ModeFilter                // filter input active
+	ModeTagPicker             // tag picker overlay
+	ModeEdit                  // config editor
+	ModeWizard                // first-run wizard
 )
 
 // DesiredInfo holds creation metadata for a ghost session (desired but not yet existing).
@@ -68,6 +69,8 @@ type Model struct {
 	warpTarget  *Session           // set on Enter, triggers tea.Quit
 	selectedKey string             // stable selection tracking across filter changes
 	matchInfo   map[string]matchInfo // fuzzy highlight indexes keyed by Session.Key()
+	tagFilter   string             // active tag filter (empty = no filter)
+	tagCursor   int                // cursor position in tag picker
 	viewOffset  int                // first visible row in the scrolling list
 	configPath          string             // path to the config file
 	config              *config.Config     // in-memory config (for editor saves)
@@ -263,6 +266,22 @@ func (m *Model) promoteGhosts(msg PromoteGhostMsg) {
 	m.scanDone++
 	m.applyFilter()
 	m.ensureViewport()
+}
+
+// allTags returns all unique tags across all sessions, sorted alphabetically.
+func (m Model) allTags() []string {
+	seen := make(map[string]bool)
+	for _, s := range m.sessions {
+		for _, tag := range s.Tags {
+			seen[tag] = true
+		}
+	}
+	tags := make([]string, 0, len(seen))
+	for tag := range seen {
+		tags = append(tags, tag)
+	}
+	slices.Sort(tags)
+	return tags
 }
 
 // visibleRows returns the number of session rows that fit on screen,
