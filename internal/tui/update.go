@@ -41,9 +41,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case tea.KeyPressMsg:
-		if msg.String() == "ctrl+c" {
-			return m, tea.Quit
-		}
 		return m.handleKey(msg)
 
 	case SessionBatchMsg:
@@ -96,18 +93,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
+	if key == "ctrl+c" {
+		return m, tea.Quit
+	}
+
 	// Delegate to handler by mode.
 	switch m.mode {
-	case ModeEdit:
-		return m.updateEditor(msg)
-	case ModeWizard:
-		return m.updateWizard(msg)
+	case ModeEdit, ModeWizard:
+		return m.handleSubModelKey(msg)
 	case ModeTagPicker:
 		return m.handleTagPickerKey(msg, key)
 	case ModeFilter:
 		return m.handleFilterKey(msg, key)
 	}
 	return m.handleNormalKey(key)
+}
+
+// handleSubModelKey delegates key events to the active sub-model (editor or wizard).
+func (m Model) handleSubModelKey(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.mode == ModeWizard {
+		return m.updateWizard(msg)
+	}
+	return m.updateEditor(msg)
 }
 
 // handleNormalKey processes keys in normal (non-filter) mode.
@@ -131,6 +138,13 @@ func (m Model) handleNormalAction(key string) (tea.Model, tea.Cmd) {
 		return m.handleWarp()
 	case "/":
 		return m.handleEnterFilter()
+	}
+	return m.handleViewOrConfigAction(key)
+}
+
+// handleViewOrConfigAction dispatches view (rescan, tags) and config (add, edit, delete) keys.
+func (m Model) handleViewOrConfigAction(key string) (tea.Model, tea.Cmd) {
+	switch key {
 	case "r":
 		return m.handleRescan()
 	case "t":

@@ -8,7 +8,7 @@ LDFLAGS    := -s -w \
               -X main.commit=$(COMMIT) \
               -X main.date=$(DATE)
 
-.PHONY: all build build-pi install lint test clean run check hooks demo-up demo-down demo-record
+.PHONY: all build build-pi install lint test clean run check hooks demo-keygen demo-up demo-down demo-record
 
 all: lint test build
 
@@ -42,12 +42,15 @@ hooks:
 	git config core.hooksPath .githooks
 	@echo "Git hooks installed"
 
-demo-up:
+demo-keygen:
+	@test -f demo/id_ed25519 || ssh-keygen -t ed25519 -f demo/id_ed25519 -N "" -C "muxwarp-demo" -q
+
+demo-up: demo-keygen
 	docker compose -f demo/docker-compose.yml up -d --build
 
 demo-down:
 	docker compose -f demo/docker-compose.yml down
 
-demo-record: build
+demo-record: build demo-keygen
 	chmod 600 demo/id_ed25519
 	vhs demo/demo.tape

@@ -178,6 +178,7 @@ func (m Model) countHosts() int {
 type columnWidths struct {
 	maxName     int
 	maxDots     int
+	maxAttached int // display width of widest attached indicator (0 if none)
 	maxAge      int
 	maxActivity int
 }
@@ -188,10 +189,19 @@ func (m Model) computeColumnWidths(now time.Time) columnWidths {
 	var cols columnWidths
 	for _, s := range m.filtered {
 		cols.maxName = max(cols.maxName, len(s.Name))
+		updateAttachedWidth(&cols, s, m.width)
 		updateDotWidth(&cols, s, m.width)
 		updateAgeWidths(&cols, s, m.width, now)
 	}
 	return cols
+}
+
+// updateAttachedWidth updates the maxAttached column width for a session.
+func updateAttachedWidth(cols *columnWidths, s Session, width int) {
+	if width >= 65 && s.Attached > 1 && !s.IsGhost() {
+		w := lipgloss.Width(fmt.Sprintf("%d↗", s.Attached))
+		cols.maxAttached = max(cols.maxAttached, w)
+	}
 }
 
 // updateDotWidth updates the maxDots column width for a session.
@@ -294,7 +304,7 @@ func (m Model) renderRow(idx int, cols columnWidths, now time.Time) string {
 	s := m.filtered[idx]
 	selected := idx == m.cursor
 	name, dots := m.paddedNameAndDots(s, cols)
-	left := buildRowLeft(s, name, dots, m.width, now, renderSelector(selected))
+	left := buildRowLeft(s, name, dots, cols, m.width, now, renderSelector(selected))
 	host := m.renderHostTag(s, m.width) + m.renderLatencyTag(s)
 	return applyRowSelection(left, host, selected, m.width)
 }
@@ -317,14 +327,25 @@ func (m Model) paddedNameAndDots(s Session, cols columnWidths) (name, dots strin
 }
 
 // buildRowLeft assembles the left portion of a row: selector + name + badge + optional fields.
-func buildRowLeft(s Session, name, dots string, width int, now time.Time, sel string) string {
+func buildRowLeft(s Session, name, dots string, cols columnWidths, width int, now time.Time, sel string) string {
 	badge := renderBadge(s, width)
 	left := sel + " " + name + "  " + badge
-	left = appendIfNonEmpty(left, " ", renderAttached(s, width))
+	left = appendPadded(left, " ", renderAttached(s, width), cols.maxAttached)
 	left = appendIfNonEmpty(left, "  ", dots)
 	left = appendIfNonEmpty(left, "  ", renderAge(s, width, now))
 	left = appendIfNonEmpty(left, "  ", renderLastActive(s, width, now))
 	return left
+}
+
+// appendPadded appends sep+val to base, padding val to targetWidth.
+// If targetWidth is 0, nothing is appended. If val is empty, padding is still applied.
+func appendPadded(base, sep, val string, targetWidth int) string {
+	if targetWidth == 0 {
+		return base
+	}
+	valWidth := lipgloss.Width(val)
+	padded := val + strings.Repeat(" ", max(targetWidth-valWidth, 0))
+	return base + sep + padded
 }
 
 // appendIfNonEmpty appends sep+val to base only when val is non-empty.

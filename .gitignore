@@ -6,3 +6,5 @@ dist/
 coverage.out
 .worktrees/
 demo/demo.gif
+demo/id_ed25519
+demo/id_ed25519.pub

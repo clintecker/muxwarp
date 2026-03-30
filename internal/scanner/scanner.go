@@ -82,20 +82,35 @@ func splitSessionFields(line string) (name string, attached, windows int, create
 	if len(parts) < 3 || !ssh.ValidSessionName(parts[0]) {
 		return "", 0, 0, 0, 0, false
 	}
-	a, err := strconv.Atoi(parts[1])
-	if err != nil {
+	a, w, parseOK := parseCoreFields(parts[1], parts[2])
+	if !parseOK {
 		return "", 0, 0, 0, 0, false
 	}
-	w, err := strconv.Atoi(parts[2])
-	if err != nil {
-		return "", 0, 0, 0, 0, false
-	}
-	var c, la int64
-	if len(parts) >= 5 {
-		c, _ = strconv.ParseInt(parts[3], 10, 64)
-		la, _ = strconv.ParseInt(parts[4], 10, 64)
-	}
+	c, la := parseTimestamps(parts)
 	return parts[0], a, w, c, la, true
+}
+
+// parseCoreFields parses the attached and windows fields from strings.
+func parseCoreFields(attachedStr, windowsStr string) (attached, windows int, ok bool) {
+	a, err := strconv.Atoi(attachedStr)
+	if err != nil {
+		return 0, 0, false
+	}
+	w, err := strconv.Atoi(windowsStr)
+	if err != nil {
+		return 0, 0, false
+	}
+	return a, w, true
+}
+
+// parseTimestamps extracts optional created/lastActivity timestamps from parts[3:4].
+func parseTimestamps(parts []string) (created, lastActivity int64) {
+	if len(parts) < 5 {
+		return 0, 0
+	}
+	c, _ := strconv.ParseInt(parts[3], 10, 64)
+	la, _ := strconv.ParseInt(parts[4], 10, 64)
+	return c, la
 }
 
 // parseSessionLine parses a single tab-separated line into a Session.
