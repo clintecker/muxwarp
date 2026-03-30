@@ -13,6 +13,9 @@ Host *
 SSHEOF
 chmod 600 "$HOME/.ssh/config"
 
+# Fix SSH key permissions (git doesn't preserve 600).
+chmod 600 "$(pwd)/demo/id_ed25519"
+
 # Copy demo config as the user's config.
 cp demo/muxwarp.config.yaml "$HOME/.muxwarp.config.yaml"
 

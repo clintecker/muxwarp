@@ -240,8 +240,13 @@ func directWarp(cfg *config.Config, timeoutSec, pattern string) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var allSessions []tui.Session
-	_ = scanner.ScanAll(ctx, cfg.HostTargets(), 8, timeoutSec, func(_ string, sessions []scanner.Session) {
-		allSessions = append(allSessions, scannerToTUI(sessions)...)
+	_ = scanner.ScanAll(ctx, cfg.HostTargets(), 8, timeoutSec, func(host string, sessions []scanner.Session) {
+		batch := scannerToTUI(sessions)
+		tags := tagsForHost(cfg, host)
+		for i := range batch {
+			batch[i].Tags = tags
+		}
+		allSessions = append(allSessions, batch...)
 	})
 	cancel()
 
@@ -451,6 +456,7 @@ func runInit(args []string) {
 	hosts := sshconfig.ParseHosts()
 	checkInitHosts(hosts)
 	cfg := config.GenerateFromSSHConfig(hosts)
+	validateInitConfig(cfg)
 	if err := config.Save(cfg, cfgPath); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing config: %v\n", err)
 		os.Exit(1)
@@ -472,6 +478,15 @@ func checkInitConflict(force bool, cfgPath string) {
 func checkInitHosts(hosts []sshconfig.Host) {
 	if len(hosts) == 0 {
 		fmt.Fprintln(os.Stderr, "No ~/.ssh/config found or no hosts defined.")
+		fmt.Fprintln(os.Stderr, "Create ~/.muxwarp.config.yaml manually or use the TUI wizard: muxwarp")
+		os.Exit(1)
+	}
+}
+
+// validateInitConfig checks that the generated config has at least one host.
+func validateInitConfig(cfg *config.Config) {
+	if len(cfg.Hosts) == 0 {
+		fmt.Fprintln(os.Stderr, "All SSH hosts were filtered (git hosting services).")
 		fmt.Fprintln(os.Stderr, "Create ~/.muxwarp.config.yaml manually or use the TUI wizard: muxwarp")
 		os.Exit(1)
 	}
