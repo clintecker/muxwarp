@@ -1,0 +1,11 @@
+defaults:
+  timeout: "2s"
+hosts:
+  - target: demo@localhost:2201
+    tags: [prod]
+  - target: demo@localhost:2202
+    tags: [prod, infra]
+  - target: demo@localhost:2203
+    tags: [staging]
+  - target: demo@localhost:2204
+    tags: [dev]

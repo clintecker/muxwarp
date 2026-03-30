@@ -1,0 +1,32 @@
+services:
+  atlas:
+    build: .
+    hostname: atlas
+    ports:
+      - "2201:22"
+    environment:
+      SESSIONS: "api-server:3 web-dev:2"
+
+  forge:
+    build: .
+    hostname: forge
+    ports:
+      - "2202:22"
+    environment:
+      SESSIONS: "monitoring:1 build-main:3"
+
+  nebula:
+    build: .
+    hostname: nebula
+    ports:
+      - "2203:22"
+    environment:
+      SESSIONS: "data-pipeline:2"
+
+  comet:
+    build: .
+    hostname: comet
+    ports:
+      - "2204:22"
+    environment:
+      SESSIONS: ""

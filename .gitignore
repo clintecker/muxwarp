@@ -5,3 +5,4 @@ dist/
 /muxwarp
 coverage.out
 .worktrees/
+demo/demo.gif

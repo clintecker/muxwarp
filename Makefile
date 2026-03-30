@@ -8,7 +8,7 @@ LDFLAGS    := -s -w \
               -X main.commit=$(COMMIT) \
               -X main.date=$(DATE)
 
-.PHONY: all build build-pi install lint test clean run check hooks
+.PHONY: all build build-pi install lint test clean run check hooks demo-up demo-down demo-record
 
 all: lint test build
 
@@ -41,3 +41,12 @@ check: lint test
 hooks:
 	git config core.hooksPath .githooks
 	@echo "Git hooks installed"
+
+demo-up:
+	docker compose -f demo/docker-compose.yml up -d --build
+
+demo-down:
+	docker compose -f demo/docker-compose.yml down
+
+demo-record: build
+	vhs demo/demo.tape
