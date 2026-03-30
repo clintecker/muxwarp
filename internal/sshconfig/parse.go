@@ -19,19 +19,27 @@ type Host struct {
 
 // DisplayTarget builds a human-readable connection string like "alice@192.168.1.50:2222".
 func (h Host) DisplayTarget() string {
-	var base string
+	return h.baseTarget() + h.portSuffix()
+}
+
+// baseTarget returns the user@host or host or alias portion of the display string.
+func (h Host) baseTarget() string {
 	switch {
 	case h.User != "" && h.HostName != "":
-		base = h.User + "@" + h.HostName
+		return h.User + "@" + h.HostName
 	case h.HostName != "":
-		base = h.HostName
+		return h.HostName
 	default:
-		base = h.Alias
+		return h.Alias
 	}
+}
+
+// portSuffix returns ":port" when the port is non-default, otherwise empty string.
+func (h Host) portSuffix() string {
 	if h.Port != "" && h.Port != "22" {
-		base += ":" + h.Port
+		return ":" + h.Port
 	}
-	return base
+	return ""
 }
 
 // ParseHosts reads ~/.ssh/config and returns parsed host entries.
@@ -58,21 +66,23 @@ func parseHostsFrom(r io.Reader) []Host {
 	for scanner.Scan() {
 		alias, finished := parseLine(scanner.Text(), current)
 		if finished {
-			// Flush the previous block before starting a new one.
-			if current != nil && !isWildcard(current.Alias) {
-				hosts = append(hosts, *current)
-			}
+			hosts = flushHost(hosts, current)
 			current = &Host{Alias: alias}
 		}
 	}
 
-	// Flush the last block.
-	if current != nil && !isWildcard(current.Alias) {
-		hosts = append(hosts, *current)
-	}
+	hosts = flushHost(hosts, current)
 
 	if len(hosts) == 0 {
 		return []Host{}
+	}
+	return hosts
+}
+
+// flushHost appends current to hosts if it is non-nil and non-wildcard.
+func flushHost(hosts []Host, current *Host) []Host {
+	if current != nil && !isWildcard(current.Alias) {
+		return append(hosts, *current)
 	}
 	return hosts
 }
@@ -86,35 +96,44 @@ func parseLine(line string, current *Host) (newAlias string, finished bool) {
 		return "", false
 	}
 
-	fields := strings.SplitN(trimmed, " ", 2)
-	if len(fields) < 2 {
-		// Handle tab-separated values as well.
-		fields = strings.SplitN(trimmed, "\t", 2)
-		if len(fields) < 2 {
-			return "", false
-		}
+	keyword, value, ok := splitKeyValue(trimmed)
+	if !ok {
+		return "", false
 	}
 
-	keyword := strings.ToLower(fields[0])
-	value := strings.TrimSpace(fields[1])
-
-	switch keyword {
-	case "host":
+	if keyword == "host" {
 		return value, true
+	}
+	applyField(current, keyword, value)
+	return "", false
+}
+
+// applyField sets a field on current based on the keyword, if current is non-nil.
+func applyField(current *Host, keyword, value string) {
+	if current == nil {
+		return
+	}
+	switch keyword {
 	case "hostname":
-		if current != nil {
-			current.HostName = value
-		}
+		current.HostName = value
 	case "user":
-		if current != nil {
-			current.User = value
-		}
+		current.User = value
 	case "port":
-		if current != nil {
-			current.Port = value
+		current.Port = value
+	}
+}
+
+// splitKeyValue splits an SSH config line into keyword and value.
+// It tries space separation first, then tab. Returns ok=false if neither works.
+func splitKeyValue(s string) (keyword, value string, ok bool) {
+	fields := strings.SplitN(s, " ", 2)
+	if len(fields) < 2 {
+		fields = strings.SplitN(s, "\t", 2)
+		if len(fields) < 2 {
+			return "", "", false
 		}
 	}
-	return "", false
+	return strings.ToLower(fields[0]), strings.TrimSpace(fields[1]), true
 }
 
 // isWildcard returns true if the alias contains wildcard characters.

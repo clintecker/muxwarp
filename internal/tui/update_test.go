@@ -501,7 +501,7 @@ func TestEditorCanceled_ReturnsToList(t *testing.T) {
 	m := newTestModelWithSessions()
 	m.mode = ModeEdit
 
-	newM, _ := m.Update(editor.EditorCanceledMsg{})
+	newM, _ := m.Update(editor.CanceledMsg{})
 	rm := newM.(Model)
 
 	if rm.mode != ModeList {
@@ -519,7 +519,7 @@ func TestEditorSaved_MergesDuplicateHost(t *testing.T) {
 	m.configPath = "/dev/null" // avoid actual file write
 
 	// Simulate adding a host with the same target.
-	msg := editor.EditorSavedMsg{
+	msg := editor.SavedMsg{
 		Entry:     config.HostEntry{Target: "alpha", Sessions: []config.DesiredSession{{Name: "new-session"}}},
 		EditIndex: -1,
 	}

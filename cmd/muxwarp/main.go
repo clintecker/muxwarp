@@ -29,117 +29,209 @@ var (
 )
 
 func main() {
-	logPath, args, logErr := extractLogFlag(os.Args[1:])
-	if logErr != "" {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", logErr)
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	cleanup, err := logging.Init(logPath)
+}
+
+// run is the real entry point. Returning an error instead of os.Exit ensures
+// deferred cleanup functions always execute.
+func run() error {
+	args, cleanup, err := parseLogFlag()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening log file: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	if cleanup != nil {
 		defer cleanup()
 	}
-
 	logging.Log().Info("muxwarp starting", "version", version, "commit", commit, "date", date)
+	return runWithArgs(args)
+}
 
-	if len(args) > 0 && args[0] == "--version" {
-		fmt.Printf("muxwarp %s (commit %s, built %s)\n", version, commit, date)
-		os.Exit(0)
+// parseLogFlag extracts the --log flag, initialises the logger, and returns
+// the remaining args plus the cleanup function.
+func parseLogFlag() (args []string, cleanup func(), err error) {
+	logPath, rest, logErr := extractLogFlag(os.Args[1:])
+	if logErr != "" {
+		return nil, nil, fmt.Errorf("%s", logErr)
 	}
-
-	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-		printUsage()
-		os.Exit(0)
+	fn, initErr := logging.Init(logPath)
+	if initErr != nil {
+		return nil, nil, fmt.Errorf("opening log file: %w", initErr)
 	}
+	return rest, fn, nil
+}
 
-	if len(args) > 0 && args[0] == "--completions" {
-		printCompletions(args[1:])
-		return
+// runWithArgs dispatches flags or runs the TUI/direct-warp flow.
+func runWithArgs(args []string) error {
+	if dispatchFlag(args) {
+		return nil
 	}
-
-	if len(args) > 0 && args[0] == "init" {
-		runInit(args[1:])
-		return
-	}
-
-	cfg, err := config.Load(config.DefaultPath())
+	cfg, err := loadOrWizard(args)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			logging.Log().Info("no config file, running wizard", "path", config.DefaultPath())
-			cfg = runWizard()
-			if cfg == nil {
-				return
-			}
-			logging.Log().Info("wizard completed", "hosts", len(cfg.Hosts))
-		} else {
-			fmt.Fprintf(os.Stderr, "Error: %v\n\nExample config (%s):\n\n%s",
-				err, config.DefaultPath(), config.ExampleConfig())
-			os.Exit(1)
-		}
+		return err
 	}
-
+	if cfg == nil {
+		return nil // wizard cancelled
+	}
 	timeoutSec := parseTimeoutSec(cfg.Defaults.Timeout)
-
 	if len(args) > 0 {
 		directWarp(cfg, timeoutSec, args[0])
-		return
+		return nil
 	}
-
 	tuiMode(cfg, timeoutSec)
+	return nil
+}
+
+// flagHandlers maps top-level flag/command names to their handler functions.
+// Each handler receives the remaining args after the flag itself.
+var flagHandlers = map[string]func([]string){
+	"--version":    func(_ []string) { printVersion() },
+	"--help":       func(_ []string) { printUsage() },
+	"-h":           func(_ []string) { printUsage() },
+	"--completions": printCompletions,
+	"init":          runInit,
+}
+
+// printVersion prints the build version line.
+func printVersion() {
+	fmt.Printf("muxwarp %s (commit %s, built %s)\n", version, commit, date)
+}
+
+// dispatchFlag handles flag-style arguments that exit early. Returns true if
+// the argument was handled (--version, --help, --completions, init).
+func dispatchFlag(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	handler, ok := flagHandlers[args[0]]
+	if !ok {
+		return false
+	}
+	handler(args[1:])
+	return true
+}
+
+// loadOrWizard loads the config, running the first-run wizard when none exists.
+// Returns (nil, nil) when the wizard is cancelled.
+func loadOrWizard(args []string) (*config.Config, error) {
+	cfg, err := config.Load(config.DefaultPath())
+	if err == nil {
+		return cfg, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("%v\n\nExample config (%s):\n\n%s",
+			err, config.DefaultPath(), config.ExampleConfig())
+	}
+	return runWizardFlow(args)
+}
+
+// runWizardFlow logs and runs the first-run wizard.
+func runWizardFlow(_ []string) (*config.Config, error) {
+	logging.Log().Info("no config file, running wizard", "path", config.DefaultPath())
+	cfg := runWizard()
+	if cfg == nil {
+		return nil, nil
+	}
+	logging.Log().Info("wizard completed", "hosts", len(cfg.Hosts))
+	return cfg, nil
 }
 
 // extractLogFlag pulls --log <path> or --log=<path> from args, returning
 // the log path and the remaining args. If --log is present without a path,
 // it returns an error message.
-func extractLogFlag(args []string) (logPath string, rest []string, err string) {
+func extractLogFlag(args []string) (logPath string, rest []string, errMsg string) {
 	for i := 0; i < len(args); i++ {
-		if args[i] == "--log" {
-			if i+1 >= len(args) {
-				return "", nil, "--log requires a file path argument"
-			}
-			logPath = args[i+1]
-			rest = append(rest, args[:i]...)
-			rest = append(rest, args[i+2:]...)
-			return logPath, rest, ""
+		lp, tail, e := matchLogArg(args, i)
+		if e != "" {
+			return "", nil, e
 		}
-		if strings.HasPrefix(args[i], "--log=") {
-			logPath = strings.TrimPrefix(args[i], "--log=")
-			if logPath == "" {
-				return "", nil, "--log requires a file path argument"
-			}
-			rest = append(rest, args[:i]...)
-			rest = append(rest, args[i+1:]...)
-			return logPath, rest, ""
+		if lp != "" {
+			return lp, tail, ""
 		}
 	}
 	return "", args, ""
+}
+
+// matchLogArg checks whether args[i] is a --log flag in either form and
+// returns the path value, the remaining args, and any error message.
+func matchLogArg(args []string, i int) (logPath string, rest []string, errMsg string) {
+	if args[i] == "--log" {
+		return matchLogExact(args, i)
+	}
+	if strings.HasPrefix(args[i], "--log=") {
+		return matchLogEquals(args, i)
+	}
+	return "", nil, ""
+}
+
+// matchLogExact handles the "--log <path>" form.
+func matchLogExact(args []string, i int) (logPath string, rest []string, errMsg string) {
+	if i+1 >= len(args) {
+		return "", nil, "--log requires a file path argument"
+	}
+	rest = append(rest, args[:i]...)
+	rest = append(rest, args[i+2:]...)
+	return args[i+1], rest, ""
+}
+
+// matchLogEquals handles the "--log=<path>" form.
+func matchLogEquals(args []string, i int) (logPath string, rest []string, errMsg string) {
+	lp := strings.TrimPrefix(args[i], "--log=")
+	if lp == "" {
+		return "", nil, "--log requires a file path argument"
+	}
+	rest = append(rest, args[:i]...)
+	rest = append(rest, args[i+1:]...)
+	return lp, rest, ""
+}
+
+// reloadConfig loads the config from disk and updates timeoutSec.
+func reloadConfig(timeoutSec string) (*config.Config, string, error) {
+	newCfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		return nil, timeoutSec, err
+	}
+	return newCfg, parseTimeoutSec(newCfg.Defaults.Timeout), nil
 }
 
 // tuiMode runs the interactive TUI in a loop. After warping into an ssh
 // session and returning, the TUI restarts with a fresh scan.
 func tuiMode(cfg *config.Config, timeoutSec string) {
 	for {
-		target, termWidth, configChanged := runTUIOnce(cfg, timeoutSec)
-		if configChanged {
-			logging.Log().Info("config changed, reloading")
-			newCfg, err := config.Load(config.DefaultPath())
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reloading config: %v\n", err)
-				return
-			}
-			cfg = newCfg
-			timeoutSec = parseTimeoutSec(cfg.Defaults.Timeout)
-			continue
+		var done bool
+		cfg, timeoutSec, done = tuiIteration(cfg, timeoutSec)
+		if done {
+			return
 		}
-		if target == nil {
-			return // user quit
-		}
-		warpChild(cfg, target, termWidth)
-		// loop: fresh rescan, new TUI
 	}
+}
+
+// tuiIteration runs one TUI cycle and returns updated cfg/timeout and whether
+// the caller should stop looping.
+func tuiIteration(cfg *config.Config, timeoutSec string) (*config.Config, string, bool) {
+	target, termWidth, configChanged := runTUIOnce(cfg, timeoutSec)
+	if configChanged {
+		return applyConfigReload(cfg, timeoutSec)
+	}
+	if target == nil {
+		return cfg, timeoutSec, true // user quit
+	}
+	warpChild(cfg, target, termWidth)
+	return cfg, timeoutSec, false // loop: fresh rescan, new TUI
+}
+
+// applyConfigReload logs, reloads, and returns the new config and timeout.
+// Returns the original values and done=true on error.
+func applyConfigReload(cfg *config.Config, timeoutSec string) (*config.Config, string, bool) {
+	logging.Log().Info("config changed, reloading")
+	newCfg, newTimeout, err := reloadConfig(timeoutSec)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reloading config: %v\n", err)
+		return cfg, timeoutSec, true
+	}
+	return newCfg, newTimeout, false
 }
 
 // warpChild plays animations and runs ssh as a child process.

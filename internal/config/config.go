@@ -343,39 +343,44 @@ func Save(cfg *Config, path string) error {
 func writeAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
 
+	tmpName, err := writeTempFile(dir, data)
+	if err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmpName, path); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("renaming temp file: %w", err)
+	}
+	return nil
+}
+
+// writeTempFile creates a temp file in dir, sets 0600 permissions, writes data,
+// and returns the temp file name. The caller is responsible for removing it on error.
+func writeTempFile(dir string, data []byte) (string, error) {
 	tmp, err := os.CreateTemp(dir, ".muxwarp-config-*.yaml")
 	if err != nil {
-		return fmt.Errorf("creating temp file: %w", err)
+		return "", fmt.Errorf("creating temp file: %w", err)
 	}
 	tmpName := tmp.Name()
 
-	// Clean up the temp file on any error path.
-	defer func() {
-		if tmpName != "" {
-			os.Remove(tmpName)
-		}
-	}()
-
 	if err := os.Chmod(tmpName, 0o600); err != nil {
 		tmp.Close()
-		return fmt.Errorf("setting file permissions: %w", err)
+		os.Remove(tmpName)
+		return "", fmt.Errorf("setting file permissions: %w", err)
 	}
 
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
-		return fmt.Errorf("writing temp file: %w", err)
+		os.Remove(tmpName)
+		return "", fmt.Errorf("writing temp file: %w", err)
 	}
+
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("closing temp file: %w", err)
+		os.Remove(tmpName)
+		return "", fmt.Errorf("closing temp file: %w", err)
 	}
-
-	if err := os.Rename(tmpName, path); err != nil {
-		return fmt.Errorf("renaming temp file: %w", err)
-	}
-
-	// Rename succeeded; clear tmpName so defer doesn't remove the final file.
-	tmpName = ""
-	return nil
+	return tmpName, nil
 }
 
 // ExampleConfig returns an example YAML configuration string for friendly error messages.

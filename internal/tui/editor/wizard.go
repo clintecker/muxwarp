@@ -61,8 +61,7 @@ func (m WizardModel) Init() tea.Cmd {
 
 // Update handles messages for the wizard.
 func (m WizardModel) Update(msg tea.Msg) (WizardModel, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		return m.handleWizardKey(msg)
 	}
 	return m.updateWizardFocusedInput(msg)
@@ -104,19 +103,29 @@ func (m WizardModel) handleHostStepKey(msg tea.KeyPressMsg) (WizardModel, tea.Cm
 func (m WizardModel) handleSessionStepKey(msg tea.KeyPressMsg) (WizardModel, tea.Cmd) {
 	k := msg.String()
 	switch k {
-	case "enter":
-		cfg := m.buildConfig(true)
-		return m, func() tea.Msg { return WizardSavedMsg{Config: cfg} }
-	case "esc":
-		cfg := m.buildConfig(false)
-		return m, func() tea.Msg { return WizardSavedMsg{Config: cfg} }
-	case "tab":
-		m.cycleSessionFocus(1)
-		return m, nil
-	case "shift+tab":
-		m.cycleSessionFocus(-1)
-		return m, nil
+	case "enter", "esc":
+		return m.saveWizard(k == "enter")
+	case "tab", "shift+tab":
+		return m.handleWizardTab(k), nil
 	}
+	return m.updateSessionStepInput(msg)
+}
+
+func (m WizardModel) saveWizard(includeSession bool) (WizardModel, tea.Cmd) {
+	cfg := m.buildConfig(includeSession)
+	return m, func() tea.Msg { return WizardSavedMsg{Config: cfg} }
+}
+
+func (m WizardModel) handleWizardTab(k string) WizardModel {
+	delta := 1
+	if k == "shift+tab" {
+		delta = -1
+	}
+	m.cycleSessionFocus(delta)
+	return m
+}
+
+func (m WizardModel) updateSessionStepInput(msg tea.KeyPressMsg) (WizardModel, tea.Cmd) {
 	var cmd tea.Cmd
 	switch m.focusField {
 	case 0:
@@ -239,19 +248,23 @@ func (m WizardModel) renderWizardInput(ti textinput.Model, fieldIndex int) strin
 }
 
 func (m WizardModel) updateWizardFocusedInput(msg tea.Msg) (WizardModel, tea.Cmd) {
-	var cmd tea.Cmd
-	switch m.step {
-	case WizardStepHost:
+	if m.step == WizardStepHost {
+		var cmd tea.Cmd
 		m.hostInput, cmd = m.hostInput.Update(msg)
-	case WizardStepSession:
-		switch m.focusField {
-		case 0:
-			m.nameInput, cmd = m.nameInput.Update(msg)
-		case 1:
-			m.dirInput, cmd = m.dirInput.Update(msg)
-		case 2:
-			m.cmdInput, cmd = m.cmdInput.Update(msg)
-		}
+		return m, cmd
+	}
+	return m.updateWizardSessionInput(msg)
+}
+
+func (m WizardModel) updateWizardSessionInput(msg tea.Msg) (WizardModel, tea.Cmd) {
+	var cmd tea.Cmd
+	switch m.focusField {
+	case 0:
+		m.nameInput, cmd = m.nameInput.Update(msg)
+	case 1:
+		m.dirInput, cmd = m.dirInput.Update(msg)
+	case 2:
+		m.cmdInput, cmd = m.cmdInput.Update(msg)
 	}
 	return m, cmd
 }

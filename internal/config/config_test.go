@@ -395,17 +395,67 @@ func TestExampleConfig(t *testing.T) {
 
 // --- Serialization tests ---
 
+// assertNoSessions is a helper that fails if a host entry has any sessions.
+func assertNoSessions(t *testing.T, label string, h HostEntry) {
+	t.Helper()
+	if len(h.Sessions) != 0 {
+		t.Errorf("expected 0 sessions for %s, got %d", label, len(h.Sessions))
+	}
+}
+
+// saveAndLoad is a test helper that saves cfg to a temp path and loads it back.
+func saveAndLoad(t *testing.T, cfg *Config) *Config {
+	t.Helper()
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := Save(cfg, cfgPath); err != nil {
+		t.Fatalf("Save() error: %v", err)
+	}
+	loaded, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error after Save: %v", err)
+	}
+	return loaded
+}
+
+// assertSessionCount fails if a host entry does not have the expected session count.
+func assertSessionCount(t *testing.T, label string, h HostEntry, want int) {
+	t.Helper()
+	if len(h.Sessions) != want {
+		t.Fatalf("expected %d sessions for %s, got %d", want, label, len(h.Sessions))
+	}
+}
+
+func testRoundTripDefaults(t *testing.T, loaded *Config) {
+	t.Helper()
+	assertString(t, "defaults.timeout", loaded.Defaults.Timeout, "5s")
+	assertString(t, "defaults.term", loaded.Defaults.Term, "screen-256color")
+}
+
+func testRoundTripPlainHosts(t *testing.T, loaded *Config) {
+	t.Helper()
+	assertString(t, "hosts[0].Target", loaded.Hosts[0].Target, "alice@atlas")
+	assertNoSessions(t, "hosts[0]", loaded.Hosts[0])
+	assertString(t, "hosts[2].Target", loaded.Hosts[2].Target, "bob@neptune")
+	assertNoSessions(t, "hosts[2]", loaded.Hosts[2])
+}
+
+func testRoundTripMappingHost(t *testing.T, loaded *Config) {
+	t.Helper()
+	assertString(t, "hosts[1].Target", loaded.Hosts[1].Target, "alice@forge")
+	assertSessionCount(t, "hosts[1]", loaded.Hosts[1], 2)
+	assertString(t, "hosts[1].sessions[0].Name", loaded.Hosts[1].Sessions[0].Name, "api-server")
+	assertString(t, "hosts[1].sessions[0].Dir", loaded.Hosts[1].Sessions[0].Dir, "~/code/api")
+	assertString(t, "hosts[1].sessions[0].Cmd", loaded.Hosts[1].Sessions[0].Cmd, "")
+	assertString(t, "hosts[1].sessions[1].Name", loaded.Hosts[1].Sessions[1].Name, "web-dev")
+	assertString(t, "hosts[1].sessions[1].Dir", loaded.Hosts[1].Sessions[1].Dir, "~/code/web")
+	assertString(t, "hosts[1].sessions[1].Cmd", loaded.Hosts[1].Sessions[1].Cmd, "nvim")
+}
+
 // TestSave_RoundTrip creates a Config with mixed hosts, saves it, loads it back,
 // and verifies all fields survive the round trip.
 func TestSave_RoundTrip(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "roundtrip.yaml")
-
 	original := &Config{
-		Defaults: Defaults{
-			Timeout: "5s",
-			Term:    "screen-256color",
-		},
+		Defaults: Defaults{Timeout: "5s", Term: "screen-256color"},
 		Hosts: []HostEntry{
 			{Target: "alice@atlas"},
 			{
@@ -419,47 +469,36 @@ func TestSave_RoundTrip(t *testing.T) {
 		},
 	}
 
-	if err := Save(original, cfgPath); err != nil {
-		t.Fatalf("Save() error: %v", err)
-	}
+	loaded := saveAndLoad(t, original)
+	t.Run("defaults", func(t *testing.T) { testRoundTripDefaults(t, loaded) })
+	t.Run("plain_hosts", func(t *testing.T) { testRoundTripPlainHosts(t, loaded) })
+	t.Run("mapping_host_sessions", func(t *testing.T) { testRoundTripMappingHost(t, loaded) })
+}
 
-	loaded, err := Load(cfgPath)
+// assertYAMLContains fails if sub is not present in the YAML output.
+func assertYAMLContains(t *testing.T, raw, sub string) {
+	t.Helper()
+	if !strings.Contains(raw, sub) {
+		t.Errorf("expected %q in YAML output:\n%s", sub, raw)
+	}
+}
+
+// assertYAMLNotContains fails if sub is present in the YAML output.
+func assertYAMLNotContains(t *testing.T, raw, sub string) {
+	t.Helper()
+	if strings.Contains(raw, sub) {
+		t.Errorf("did not expect %q in YAML output:\n%s", sub, raw)
+	}
+}
+
+// marshalConfig is a test helper that marshals cfg and returns the YAML string.
+func marshalConfig(t *testing.T, cfg *Config) string {
+	t.Helper()
+	data, err := yaml.Marshal(cfg)
 	if err != nil {
-		t.Fatalf("Load() error after Save: %v", err)
+		t.Fatalf("yaml.Marshal() error: %v", err)
 	}
-
-	// Verify defaults.
-	assertString(t, "defaults.timeout", loaded.Defaults.Timeout, "5s")
-	assertString(t, "defaults.term", loaded.Defaults.Term, "screen-256color")
-
-	// Verify hosts count.
-	if len(loaded.Hosts) != 3 {
-		t.Fatalf("expected 3 hosts, got %d", len(loaded.Hosts))
-	}
-
-	// Verify plain hosts.
-	assertString(t, "hosts[0].Target", loaded.Hosts[0].Target, "alice@atlas")
-	if len(loaded.Hosts[0].Sessions) != 0 {
-		t.Errorf("expected 0 sessions for hosts[0], got %d", len(loaded.Hosts[0].Sessions))
-	}
-
-	// Verify mapping host with sessions.
-	assertString(t, "hosts[1].Target", loaded.Hosts[1].Target, "alice@forge")
-	if len(loaded.Hosts[1].Sessions) != 2 {
-		t.Fatalf("expected 2 sessions for hosts[1], got %d", len(loaded.Hosts[1].Sessions))
-	}
-	assertString(t, "hosts[1].sessions[0].Name", loaded.Hosts[1].Sessions[0].Name, "api-server")
-	assertString(t, "hosts[1].sessions[0].Dir", loaded.Hosts[1].Sessions[0].Dir, "~/code/api")
-	assertString(t, "hosts[1].sessions[0].Cmd", loaded.Hosts[1].Sessions[0].Cmd, "")
-	assertString(t, "hosts[1].sessions[1].Name", loaded.Hosts[1].Sessions[1].Name, "web-dev")
-	assertString(t, "hosts[1].sessions[1].Dir", loaded.Hosts[1].Sessions[1].Dir, "~/code/web")
-	assertString(t, "hosts[1].sessions[1].Cmd", loaded.Hosts[1].Sessions[1].Cmd, "nvim")
-
-	// Verify trailing plain host.
-	assertString(t, "hosts[2].Target", loaded.Hosts[2].Target, "bob@neptune")
-	if len(loaded.Hosts[2].Sessions) != 0 {
-		t.Errorf("expected 0 sessions for hosts[2], got %d", len(loaded.Hosts[2].Sessions))
-	}
+	return string(data)
 }
 
 // TestMarshalYAML_MixedHosts verifies the raw YAML output contains both plain
@@ -478,30 +517,11 @@ func TestMarshalYAML_MixedHosts(t *testing.T) {
 		},
 	}
 
-	data, err := yaml.Marshal(&cfg)
-	if err != nil {
-		t.Fatalf("yaml.Marshal() error: %v", err)
-	}
-
-	raw := string(data)
-
-	// The plain host should appear as a bare scalar in the YAML list.
-	if !strings.Contains(raw, "- alice@atlas") {
-		t.Errorf("expected plain scalar '- alice@atlas' in output:\n%s", raw)
-	}
-
-	// The mapping host should have a target key.
-	if !strings.Contains(raw, "target: alice@forge") {
-		t.Errorf("expected 'target: alice@forge' in output:\n%s", raw)
-	}
-
-	// Sessions should appear under the mapping host.
-	if !strings.Contains(raw, "name: api-server") {
-		t.Errorf("expected 'name: api-server' in output:\n%s", raw)
-	}
-	if !strings.Contains(raw, "dir: ~/code/api") {
-		t.Errorf("expected 'dir: ~/code/api' in output:\n%s", raw)
-	}
+	raw := marshalConfig(t, &cfg)
+	assertYAMLContains(t, raw, "- alice@atlas")
+	assertYAMLContains(t, raw, "target: alice@forge")
+	assertYAMLContains(t, raw, "name: api-server")
+	assertYAMLContains(t, raw, "dir: ~/code/api")
 }
 
 // TestMarshalYAML_PlainOnly verifies that a config with only plain hosts
@@ -516,28 +536,11 @@ func TestMarshalYAML_PlainOnly(t *testing.T) {
 		},
 	}
 
-	data, err := yaml.Marshal(&cfg)
-	if err != nil {
-		t.Fatalf("yaml.Marshal() error: %v", err)
-	}
-
-	raw := string(data)
-
-	// All hosts should be plain scalars.
-	if !strings.Contains(raw, "- server1") {
-		t.Errorf("expected '- server1' in output:\n%s", raw)
-	}
-	if !strings.Contains(raw, "- server2") {
-		t.Errorf("expected '- server2' in output:\n%s", raw)
-	}
-	if !strings.Contains(raw, "- server3") {
-		t.Errorf("expected '- server3' in output:\n%s", raw)
-	}
-
-	// Should not contain "target:" since no hosts have sessions.
-	if strings.Contains(raw, "target:") {
-		t.Errorf("expected no 'target:' key for plain-only hosts, but found one:\n%s", raw)
-	}
+	raw := marshalConfig(t, &cfg)
+	assertYAMLContains(t, raw, "- server1")
+	assertYAMLContains(t, raw, "- server2")
+	assertYAMLContains(t, raw, "- server3")
+	assertYAMLNotContains(t, raw, "target:")
 }
 
 func loadTagsConfig(t *testing.T) *Config {
@@ -614,41 +617,40 @@ func TestSave_RoundTrip_WithTags(t *testing.T) {
 	}
 }
 
+// assertFilePerms checks that the file at path has the expected permission bits.
+func assertFilePerms(t *testing.T, path string, want os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("file not found: %v", err)
+	}
+	if info.Mode().Perm() != want {
+		t.Errorf("expected file permissions %04o, got %04o", want, info.Mode().Perm())
+	}
+}
+
 // TestSave_CreatesNewFile verifies that Save creates a new file at a path
 // that doesn't exist yet, and the file can be loaded back successfully.
 func TestSave_CreatesNewFile(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "subdir", "new-config.yaml")
 
-	// Create the parent directory so writeAtomic can place the temp file.
 	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	cfg := &Config{
 		Defaults: Defaults{Timeout: "3s", Term: "xterm-256color"},
-		Hosts: []HostEntry{
-			{Target: "server1"},
-		},
+		Hosts:    []HostEntry{{Target: "server1"}},
 	}
 
 	if err := Save(cfg, cfgPath); err != nil {
 		t.Fatalf("Save() error: %v", err)
 	}
 
-	// Verify the file was created.
-	info, err := os.Stat(cfgPath)
-	if err != nil {
-		t.Fatalf("file not created: %v", err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Errorf("expected file permissions 0600, got %o", info.Mode().Perm())
-	}
-
-	// Verify it can be loaded back.
-	loaded, err := Load(cfgPath)
-	if err != nil {
-		t.Fatalf("Load() error after Save: %v", err)
-	}
-	assertString(t, "hosts[0].Target", loaded.Hosts[0].Target, "server1")
+	t.Run("file_perms", func(t *testing.T) { assertFilePerms(t, cfgPath, 0o600) })
+	t.Run("loads_correctly", func(t *testing.T) {
+		loaded := saveAndLoad(t, cfg)
+		assertString(t, "hosts[0].Target", loaded.Hosts[0].Target, "server1")
+	})
 }

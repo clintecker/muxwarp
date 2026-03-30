@@ -73,52 +73,53 @@ func (d DropdownState) View(existingTargets []string) string {
 		return ""
 	}
 
+	existingSet := toStringSet(existingTargets)
 	var b strings.Builder
-	existingSet := make(map[string]bool)
-	for _, t := range existingTargets {
-		existingSet[t] = true
-	}
-
 	for i, host := range d.filtered {
-		isSelected := i == d.cursor
-
-		// Format: "  ▸ atlas        alice@192.168.1.50"
-		prefix := "    "
-		if isSelected {
-			prefix = "  ▸ "
-		}
-
-		// Alias left-aligned, target right-aligned with spacing.
-		alias := host.Alias
-		target := host.DisplayTarget()
-
-		// Add "(added)" tag if already configured.
-		added := ""
-		if existingSet[alias] {
-			added = " " + helperStyle.Render("(added)")
-		}
-
-		line := prefix + alias
-		// Pad alias to 14 characters for alignment.
-		if len(alias) < 14 {
-			line += strings.Repeat(" ", 14-len(alias))
-		} else {
-			line += " "
-		}
-		line += target + added
-
-		if isSelected {
-			b.WriteString(dropdownSelectedStyle.Render(line))
-		} else {
-			b.WriteString(sessionNormalStyle.Render(line))
-		}
-
-		if i < len(d.filtered)-1 {
+		if i > 0 {
 			b.WriteString("\n")
 		}
+		b.WriteString(d.renderDropdownRow(i, host, existingSet))
 	}
-
 	return b.String()
+}
+
+func toStringSet(items []string) map[string]bool {
+	set := make(map[string]bool, len(items))
+	for _, item := range items {
+		set[item] = true
+	}
+	return set
+}
+
+func (d DropdownState) renderDropdownRow(i int, host sshconfig.Host, existingSet map[string]bool) string {
+	isSelected := i == d.cursor
+	line := d.formatDropdownLine(host, isSelected, existingSet)
+	if isSelected {
+		return dropdownSelectedStyle.Render(line)
+	}
+	return sessionNormalStyle.Render(line)
+}
+
+func (d DropdownState) formatDropdownLine(host sshconfig.Host, selected bool, existingSet map[string]bool) string {
+	prefix := "    "
+	if selected {
+		prefix = "  ▸ "
+	}
+	line := prefix + host.Alias
+	line += aliasPadding(host.Alias)
+	line += host.DisplayTarget()
+	if existingSet[host.Alias] {
+		line += " " + helperStyle.Render("(added)")
+	}
+	return line
+}
+
+func aliasPadding(alias string) string {
+	if len(alias) < 14 {
+		return strings.Repeat(" ", 14-len(alias))
+	}
+	return " "
 }
 
 // filterHosts performs case-insensitive substring matching against alias, hostname, and user.
@@ -130,16 +131,18 @@ func filterHosts(hosts []sshconfig.Host, query string) []sshconfig.Host {
 
 	lower := strings.ToLower(query)
 	var matches []sshconfig.Host
-
 	for _, h := range hosts {
-		if strings.Contains(strings.ToLower(h.Alias), lower) ||
-			strings.Contains(strings.ToLower(h.HostName), lower) ||
-			strings.Contains(strings.ToLower(h.User), lower) {
+		if hostMatchesQuery(h, lower) {
 			matches = append(matches, h)
 		}
 	}
-
 	return matches
+}
+
+func hostMatchesQuery(h sshconfig.Host, lower string) bool {
+	return strings.Contains(strings.ToLower(h.Alias), lower) ||
+		strings.Contains(strings.ToLower(h.HostName), lower) ||
+		strings.Contains(strings.ToLower(h.User), lower)
 }
 
 // renderHostMetadata returns the metadata preview line for the best matching SSH host.
@@ -149,25 +152,28 @@ func renderHostMetadata(input string, sshHosts []sshconfig.Host) string {
 	if input == "" {
 		return ""
 	}
-
-	// Find the best match (prefix match on alias).
-	var bestMatch *sshconfig.Host
-	for i, h := range sshHosts {
-		if strings.HasPrefix(strings.ToLower(h.Alias), strings.ToLower(input)) {
-			bestMatch = &sshHosts[i]
-			// Prefer exact match.
-			if strings.EqualFold(h.Alias, input) {
-				break
-			}
-		}
-	}
-
+	bestMatch := findBestHostMatch(input, sshHosts)
 	if bestMatch == nil {
 		return ""
 	}
-
 	line := "  " + bestMatch.Alias + " → " + bestMatch.DisplayTarget()
 	return helperStyle.Render(line)
+}
+
+// findBestHostMatch returns the best prefix match for input, preferring exact matches.
+func findBestHostMatch(input string, hosts []sshconfig.Host) *sshconfig.Host {
+	var best *sshconfig.Host
+	lower := strings.ToLower(input)
+	for i, h := range hosts {
+		if !strings.HasPrefix(strings.ToLower(h.Alias), lower) {
+			continue
+		}
+		best = &hosts[i]
+		if strings.EqualFold(h.Alias, input) {
+			return best
+		}
+	}
+	return best
 }
 
 // dropdownSelectedStyle renders the selected item in the dropdown.

@@ -3,7 +3,6 @@ package tui
 import (
 	"cmp"
 	"slices"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -74,8 +73,6 @@ type Model struct {
 	viewOffset  int                // first visible row in the scrolling list
 	configPath          string             // path to the config file
 	config              *config.Config     // in-memory config (for editor saves)
-	toastText           string             // toast notification text
-	toastExpiry         time.Time          // when the toast should disappear
 	editor              editor.Model        // config editor sub-model
 	wizard              editor.WizardModel  // first-run wizard sub-model
 	sshHosts            []sshconfig.Host    // parsed SSH config hosts
@@ -191,9 +188,18 @@ func (m *Model) SetWizardMode() {
 // WizardConfig returns the config produced by the wizard, or nil.
 func (m Model) WizardConfig() *config.Config { return m.wizardConfig }
 
+// hasValidCursorSelection returns true when there is a config, a non-empty
+// filtered list, and the cursor is within bounds.
+func (m Model) hasValidCursorSelection() bool {
+	if m.config == nil || len(m.filtered) == 0 {
+		return false
+	}
+	return m.cursor >= 0 && m.cursor < len(m.filtered)
+}
+
 // findHostEntry returns the config entry and index for the currently selected session's host.
 func (m Model) findHostEntry() (config.HostEntry, int, bool) {
-	if m.config == nil || len(m.filtered) == 0 || m.cursor < 0 || m.cursor >= len(m.filtered) {
+	if !m.hasValidCursorSelection() {
 		return config.HostEntry{}, -1, false
 	}
 	target := m.filtered[m.cursor].Host
