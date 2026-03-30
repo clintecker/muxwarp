@@ -55,7 +55,7 @@ func TestIsGitHost(t *testing.T) {
 		{"bitbucket.org", true},
 		{"bitbucket.com", true},
 		{"ssh.dev.azure.com", true},
-		{"my-git-server", true},
+		{"my-git-server", false},
 		{"indigo", false},
 		{"atlas", false},
 		{"forge", false},

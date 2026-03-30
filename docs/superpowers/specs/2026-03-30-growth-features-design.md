@@ -133,7 +133,7 @@ The `--interactive` flag (Bubble Tea host checklist) is deferred to a future PR.
 ### Edge Cases
 
 - No `~/.ssh/config`: print helpful message suggesting manual config creation, exit 1.
-- `~/.ssh/config` exists but yields 0 valid hosts: print message, still create config with empty hosts list so the user can add manually via the TUI editor.
+- `~/.ssh/config` exists but yields 0 valid hosts after filtering: print message explaining all hosts were filtered, exit 1. An empty config would fail `Load()` validation, so we don't write one.
 - `--force` overwrites existing config without prompt.
 
 ## 4. Homebrew Tap + Shell Completions

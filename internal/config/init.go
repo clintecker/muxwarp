@@ -37,5 +37,5 @@ func isGitHost(alias string) bool {
 			return true
 		}
 	}
-	return strings.Contains(lower, "git")
+	return false
 }
