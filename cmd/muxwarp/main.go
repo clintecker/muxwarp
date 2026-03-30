@@ -54,6 +54,11 @@ func main() {
 		os.Exit(0)
 	}
 
+	if len(args) > 0 && args[0] == "init" {
+		runInit(args[1:])
+		return
+	}
+
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -433,12 +438,46 @@ func runWizard() *config.Config {
 	return cfg
 }
 
+func runInit(args []string) {
+	force := len(args) > 0 && args[0] == "--force"
+	cfgPath := config.DefaultPath()
+	checkInitConflict(force, cfgPath)
+	hosts := sshconfig.ParseHosts()
+	checkInitHosts(hosts)
+	cfg := config.GenerateFromSSHConfig(hosts)
+	if err := config.Save(cfg, cfgPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing config: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Created %s with %d hosts from ~/.ssh/config\n", cfgPath, len(cfg.Hosts))
+	fmt.Println("Run 'muxwarp' to start scanning. Press 'e' in the TUI to edit config.")
+}
+
+func checkInitConflict(force bool, cfgPath string) {
+	if force {
+		return
+	}
+	if _, err := os.Stat(cfgPath); err == nil {
+		fmt.Fprintf(os.Stderr, "Config already exists: %s\nUse --force to overwrite.\n", cfgPath)
+		os.Exit(1)
+	}
+}
+
+func checkInitHosts(hosts []sshconfig.Host) {
+	if len(hosts) == 0 {
+		fmt.Fprintln(os.Stderr, "No ~/.ssh/config found or no hosts defined.")
+		fmt.Fprintln(os.Stderr, "Create ~/.muxwarp.config.yaml manually or use the TUI wizard: muxwarp")
+		os.Exit(1)
+	}
+}
+
 func printUsage() {
 	fmt.Printf(`muxwarp %s — warp into tmux sessions on remote machines
 
 Usage:
   muxwarp                     Launch interactive TUI
   muxwarp <pattern>           Fuzzy-match and warp directly
+  muxwarp init [--force]      Generate config from ~/.ssh/config
   muxwarp --log <path>        Write debug logs to file
   muxwarp --version           Print version and exit
   muxwarp --help              Show this help
