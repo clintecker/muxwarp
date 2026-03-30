@@ -31,12 +31,15 @@ type DesiredInfo struct {
 
 // Session represents a remote tmux session discovered by the scanner.
 type Session struct {
-	Host      string       // full hostname
-	HostShort string       // abbreviated hostname
-	Name      string       // tmux session name
-	Attached  int          // number of attached clients (0 = free)
-	Windows   int          // number of windows
-	Desired   *DesiredInfo // non-nil for ghost sessions (desired but not yet created)
+	Host         string       // full hostname
+	HostShort    string       // abbreviated hostname
+	Name         string       // tmux session name
+	Attached     int          // number of attached clients (0 = free)
+	Windows      int          // number of windows
+	Created      int64        // unix timestamp of creation (0 if unknown)
+	LastActivity int64        // unix timestamp of last activity (0 if unknown)
+	Tags         []string     // host tags from config (empty if untagged)
+	Desired      *DesiredInfo // non-nil for ghost sessions (desired but not yet created)
 }
 
 // IsGhost returns true if this session is desired but doesn't exist yet.

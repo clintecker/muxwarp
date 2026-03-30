@@ -74,6 +74,14 @@ var (
 	windowDotStyle = lipgloss.NewStyle().
 			Foreground(colorSlate)
 
+	// Metadata text (age, last activity).
+	metadataStyle = lipgloss.NewStyle().
+			Foreground(colorSlate)
+
+	// Attached count indicator (multiple clients).
+	attachedStyle = lipgloss.NewStyle().
+			Foreground(colorGreen)
+
 	// Footer help text.
 	footerStyle = lipgloss.NewStyle().
 			Foreground(colorSlate)

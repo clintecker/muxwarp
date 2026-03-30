@@ -374,11 +374,13 @@ func scannerToTUI(sessions []scanner.Session) []tui.Session {
 	result := make([]tui.Session, len(sessions))
 	for i, s := range sessions {
 		result[i] = tui.Session{
-			Host:      s.Host,
-			HostShort: s.HostShort,
-			Name:      s.Name,
-			Attached:  s.Attached,
-			Windows:   s.Windows,
+			Host:         s.Host,
+			HostShort:    s.HostShort,
+			Name:         s.Name,
+			Attached:     s.Attached,
+			Windows:      s.Windows,
+			Created:      s.Created,
+			LastActivity: s.LastActivity,
 		}
 	}
 	return result
