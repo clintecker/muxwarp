@@ -6,7 +6,7 @@ Set Height 600
 Set FontSize 16
 Set Theme "Dracula"
 
-Type `MUXWARP_CONFIG=demo/muxwarp.config.yaml SSH_OPTIONS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i demo/id_ed25519" ./bin/muxwarp`
+Type `./demo/run-demo.sh`
 Enter
 Sleep 4s
 

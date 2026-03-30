@@ -192,7 +192,7 @@ func TestRenderHeader_DoneScanning(t *testing.T) {
 func TestComputeColumnWidths(t *testing.T) {
 	m := newTestModelWithSessions()
 
-	cols := m.computeColumnWidths()
+	cols := m.computeColumnWidths(time.Now())
 
 	// Sessions: "dev" (3), "build" (5), "staging" (7) — max name = 7
 	if cols.maxName != 7 {
@@ -209,7 +209,7 @@ func TestComputeColumnWidths_NarrowTerminal(t *testing.T) {
 	m := newTestModelWithSessions()
 	m.width = 50 // below 60 threshold
 
-	cols := m.computeColumnWidths()
+	cols := m.computeColumnWidths(time.Now())
 
 	if cols.maxDots != 0 {
 		t.Errorf("maxDots should be 0 for narrow terminal, got %d", cols.maxDots)
@@ -220,13 +220,14 @@ func TestColumnAlignment_HostsAligned(t *testing.T) {
 	m := newTestModelWithSessions()
 	m.width = 100
 
-	cols := m.computeColumnWidths()
+	now := time.Now()
+	cols := m.computeColumnWidths(now)
 
 	// Render all rows, strip ANSI, find host at rune level (not byte level,
 	// since ▪/◇/◆ are multi-byte UTF-8 but 1 visual column each).
 	hostPositions := make(map[int]bool)
 	for i := range m.filtered {
-		row := m.renderRow(i, cols)
+		row := m.renderRow(i, cols, now)
 		plain := ansiRE.ReplaceAllString(row, "")
 		host := m.filtered[i].HostShort
 		runes := []rune(plain)

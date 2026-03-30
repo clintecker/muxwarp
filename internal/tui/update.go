@@ -178,10 +178,10 @@ func (m Model) handleTagPickerKey(_ tea.KeyPressMsg, key string) (tea.Model, tea
 		return m, nil
 	case "enter":
 		return m.handleTagPickerEnter(tags)
-	case "up", "k":
+	case "up", "k", "left", "h":
 		m.tagCursor = max(m.tagCursor-1, 0)
 		return m, nil
-	case "down", "j":
+	case "down", "j", "right", "l":
 		m.tagCursor = min(m.tagCursor+1, len(tags)-1)
 		return m, nil
 	}

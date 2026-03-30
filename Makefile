@@ -49,4 +49,5 @@ demo-down:
 	docker compose -f demo/docker-compose.yml down
 
 demo-record: build
+	chmod 600 demo/id_ed25519
 	vhs demo/demo.tape

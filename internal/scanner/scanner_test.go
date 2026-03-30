@@ -119,7 +119,7 @@ func TestScanHost_InvalidSessionName(t *testing.T) {
 printf 'good-session\t1\t2\n'
 printf 'bad:name\t0\t1\n'
 printf 'also_good\t0\t5\n'
-printf 'bad\x01ctrl\t1\t1\n'
+printf 'bad\001ctrl\t1\t1\n'
 `)
 
 	ctx := context.Background()

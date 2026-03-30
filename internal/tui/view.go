@@ -64,7 +64,7 @@ func (m Model) renderTagPicker() string {
 	b.WriteRune('\n')
 	b.WriteString(renderTagList(tags, m.tagCursor))
 	b.WriteRune('\n')
-	b.WriteString(footerStyle.Render("enter select │ esc cancel"))
+	b.WriteString(footerStyle.Render("h/l navigate │ enter select │ esc cancel"))
 	return b.String()
 }
 
@@ -184,8 +184,7 @@ type columnWidths struct {
 
 // computeColumnWidths computes the max name length and max dot count
 // across all filtered sessions for column alignment.
-func (m Model) computeColumnWidths() columnWidths {
-	now := time.Now()
+func (m Model) computeColumnWidths(now time.Time) columnWidths {
 	var cols columnWidths
 	for _, s := range m.filtered {
 		cols.maxName = max(cols.maxName, len(s.Name))
@@ -231,7 +230,8 @@ func activityWidth(s Session, now time.Time) int {
 // renderList builds the scrolling session list.
 func (m Model) renderList() string {
 	visible := m.visibleRows()
-	cols := m.computeColumnWidths()
+	now := time.Now()
+	cols := m.computeColumnWidths(now)
 	var b strings.Builder
 
 	end := min(m.viewOffset+visible, len(m.filtered))
@@ -240,7 +240,7 @@ func (m Model) renderList() string {
 		if i > m.viewOffset {
 			b.WriteRune('\n')
 		}
-		b.WriteString(m.renderRow(i, cols))
+		b.WriteString(m.renderRow(i, cols, now))
 	}
 
 	// Pad remaining rows if the list is shorter than the viewport.
@@ -290,10 +290,9 @@ func renderLastActive(s Session, termWidth int, now time.Time) string {
 // Columns are padded so names, badges, dots, and hosts align vertically:
 //
 //	▸  name(padded)  ◇ IDLE  ▪▪(padded)   host
-func (m Model) renderRow(idx int, cols columnWidths) string {
+func (m Model) renderRow(idx int, cols columnWidths, now time.Time) string {
 	s := m.filtered[idx]
 	selected := idx == m.cursor
-	now := time.Now()
 	name, dots := m.paddedNameAndDots(s, cols)
 	left := buildRowLeft(s, name, dots, m.width, now, renderSelector(selected))
 	host := m.renderHostTag(s, m.width) + m.renderLatencyTag(s)
