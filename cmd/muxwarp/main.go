@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/sahilm/fuzzy"
 
+	"github.com/clintecker/muxwarp/completions"
 	"github.com/clintecker/muxwarp/internal/config"
 	"github.com/clintecker/muxwarp/internal/logging"
 	"github.com/clintecker/muxwarp/internal/scanner"
@@ -52,6 +53,11 @@ func main() {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
 		printUsage()
 		os.Exit(0)
+	}
+
+	if len(args) > 0 && args[0] == "--completions" {
+		printCompletions(args[1:])
+		return
 	}
 
 	if len(args) > 0 && args[0] == "init" {
@@ -475,13 +481,41 @@ func printUsage() {
 	fmt.Printf(`muxwarp %s — warp into tmux sessions on remote machines
 
 Usage:
-  muxwarp                     Launch interactive TUI
-  muxwarp <pattern>           Fuzzy-match and warp directly
-  muxwarp init [--force]      Generate config from ~/.ssh/config
-  muxwarp --log <path>        Write debug logs to file
-  muxwarp --version           Print version and exit
-  muxwarp --help              Show this help
+  muxwarp                          Launch interactive TUI
+  muxwarp <pattern>                Fuzzy-match and warp directly
+  muxwarp init [--force]           Generate config from ~/.ssh/config
+  muxwarp --log <path>             Write debug logs to file
+  muxwarp --completions <shell>    Output shell completions (bash, zsh, fish)
+  muxwarp --version                Print version and exit
+  muxwarp --help                   Show this help
 `, version)
+}
+
+func printCompletions(args []string) {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "--completions requires an argument: bash, zsh, or fish")
+		os.Exit(1)
+	}
+
+	fileMap := map[string]string{
+		"bash": "muxwarp.bash",
+		"zsh":  "muxwarp.zsh",
+		"fish": "muxwarp.fish",
+	}
+
+	filename, ok := fileMap[args[0]]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Unknown shell %q. Supported: bash, zsh, fish\n", args[0])
+		os.Exit(1)
+	}
+
+	data, err := completions.Scripts.ReadFile(filename)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading completion script: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Print(string(data))
 }
 
 // parseTimeoutSec parses a duration string (e.g. "3s") and returns the
