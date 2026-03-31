@@ -51,6 +51,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ensureViewport()
 		return m, nil
 
+	case PromoteGhostMsg:
+		m.promoteGhosts(msg)
+		return m, nil
+
 	case ScanDoneMsg:
 		m.scanning = false
 		return m, nil

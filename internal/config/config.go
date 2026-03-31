@@ -15,6 +15,7 @@ import (
 type DesiredSession struct {
 	Name string `yaml:"name"`
 	Dir  string `yaml:"dir,omitempty"`
+	Repo string `yaml:"repo,omitempty"`
 	Cmd  string `yaml:"cmd,omitempty"`
 }
 
@@ -163,6 +164,14 @@ func validateHostSessions(h HostEntry) error {
 		if !ssh.ValidSessionName(ds.Name) {
 			return fmt.Errorf("invalid session name %q for host %q", ds.Name, h.Target)
 		}
+		if ds.Repo != "" {
+			if ds.Dir == "" {
+				return fmt.Errorf("session %q for host %q: repo requires dir", ds.Name, h.Target)
+			}
+			if !ssh.ValidRepoSlug(ds.Repo) {
+				return fmt.Errorf("session %q for host %q: invalid repo slug %q", ds.Name, h.Target, ds.Repo)
+			}
+		}
 	}
 	return nil
 }
@@ -258,6 +267,13 @@ func marshalMappingHost(h HostEntry) (yaml.Node, error) {
 				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Dir},
 			)
 		}
+		// repo (optional)
+		if ds.Repo != "" {
+			sessionMap.Content = append(sessionMap.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "repo"},
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Repo},
+			)
+		}
 		// cmd (optional)
 		if ds.Cmd != "" {
 			sessionMap.Content = append(sessionMap.Content,
@@ -342,6 +358,7 @@ hosts:
     sessions:
       - name: myproject
         dir: ~/code/myproject
+        repo: myorg/myproject
   - server3
 `
 }

@@ -24,8 +24,9 @@ const (
 
 // DesiredInfo holds creation metadata for a ghost session (desired but not yet existing).
 type DesiredInfo struct {
-	Dir string
-	Cmd string
+	Dir  string
+	Repo string
+	Cmd  string
 }
 
 // Session represents a remote tmux session discovered by the scanner.
@@ -79,6 +80,13 @@ type Model struct {
 
 // SessionBatchMsg delivers a batch of sessions from one host.
 type SessionBatchMsg struct {
+	Host     string
+	Sessions []Session
+}
+
+// PromoteGhostMsg delivers real sessions from a host scan. Ghosts matching
+// these sessions are replaced with the real versions.
+type PromoteGhostMsg struct {
 	Host     string
 	Sessions []Session
 }
@@ -202,6 +210,40 @@ func attachedRank(s Session) int {
 		return 0
 	}
 	return 1
+}
+
+// promoteGhosts replaces ghost sessions with real sessions from scan results.
+// Ghosts that match a real session (same host+name) are replaced; ghosts with
+// no match are kept. Real sessions with no matching ghost are added.
+func (m *Model) promoteGhosts(msg PromoteGhostMsg) {
+	// Build set of real session names for this host.
+	realNames := make(map[string]Session, len(msg.Sessions))
+	for _, s := range msg.Sessions {
+		realNames[s.Name] = s
+	}
+
+	// Replace matching ghosts with real sessions, track which were matched.
+	matched := make(map[string]bool)
+	for i, s := range m.sessions {
+		if s.Host == msg.Host && s.IsGhost() {
+			if real, ok := realNames[s.Name]; ok {
+				m.sessions[i] = real
+				matched[s.Name] = true
+			}
+		}
+	}
+
+	// Add any real sessions that had no matching ghost.
+	for _, s := range msg.Sessions {
+		if !matched[s.Name] {
+			m.sessions = append(m.sessions, s)
+		}
+	}
+
+	sortSessions(m.sessions)
+	m.scanDone++
+	m.applyFilter()
+	m.ensureViewport()
 }
 
 // visibleRows returns the number of session rows that fit on screen,

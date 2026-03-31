@@ -221,6 +221,108 @@ func TestLoad_InvalidSessionName(t *testing.T) {
 	}
 }
 
+// TestLoad_WithRepo tests that a config with repo field parses correctly.
+func TestLoad_WithRepo(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+
+	content := []byte(`hosts:
+  - target: clint@indigo
+    sessions:
+      - name: muxwarp
+        dir: ~/code/muxwarp
+        repo: clintecker/muxwarp
+`)
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() returned unexpected error: %v", err)
+	}
+
+	assertString(t, "session[0].Repo", cfg.Hosts[0].Sessions[0].Repo, "clintecker/muxwarp")
+}
+
+// TestLoad_RepoWithoutDir tests that repo without dir returns a validation error.
+func TestLoad_RepoWithoutDir(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+
+	content := []byte(`hosts:
+  - target: clint@indigo
+    sessions:
+      - name: muxwarp
+        repo: clintecker/muxwarp
+`)
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(cfgPath)
+	if err == nil {
+		t.Fatal("Load() expected error for repo without dir, got nil")
+	}
+	if !strings.Contains(err.Error(), "repo requires dir") {
+		t.Errorf("expected error containing %q, got %q", "repo requires dir", err.Error())
+	}
+}
+
+// TestLoad_InvalidRepoSlug tests that an invalid repo slug returns a validation error.
+func TestLoad_InvalidRepoSlug(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+
+	content := []byte(`hosts:
+  - target: clint@indigo
+    sessions:
+      - name: muxwarp
+        dir: ~/code/muxwarp
+        repo: not-a-valid-slug
+`)
+	if err := os.WriteFile(cfgPath, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(cfgPath)
+	if err == nil {
+		t.Fatal("Load() expected error for invalid repo slug, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid repo slug") {
+		t.Errorf("expected error containing %q, got %q", "invalid repo slug", err.Error())
+	}
+}
+
+// TestSave_RoundTrip_WithRepo verifies that the repo field survives a save/load round trip.
+func TestSave_RoundTrip_WithRepo(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "roundtrip-repo.yaml")
+
+	original := &Config{
+		Defaults: Defaults{Timeout: "3s", Term: "xterm-256color"},
+		Hosts: []HostEntry{
+			{
+				Target: "alice@forge",
+				Sessions: []DesiredSession{
+					{Name: "proj", Dir: "~/code/proj", Repo: "alice/proj"},
+				},
+			},
+		},
+	}
+
+	if err := Save(original, cfgPath); err != nil {
+		t.Fatalf("Save() error: %v", err)
+	}
+
+	loaded, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error after Save: %v", err)
+	}
+
+	assertString(t, "hosts[0].sessions[0].Repo", loaded.Hosts[0].Sessions[0].Repo, "alice/proj")
+}
+
 // TestLoad_MissingFile verifies that loading a non-existent file returns an error.
 func TestLoad_MissingFile(t *testing.T) {
 	_, err := Load("/nonexistent/path/config.yaml")

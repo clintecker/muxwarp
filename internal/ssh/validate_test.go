@@ -62,3 +62,78 @@ func TestValidSessionName_Invalid(t *testing.T) {
 		}
 	}
 }
+
+func TestValidRepoSlug_Valid(t *testing.T) {
+	t.Parallel()
+
+	valid := []string{
+		"owner/repo",
+		"my-org/my-repo",
+		"user_name/repo_name",
+		"org.name/repo.name",
+		"A/B",
+		"clintecker/muxwarp",
+		"anthropics/claude-code",
+		"foo-bar.baz/qux_123",
+	}
+
+	for _, slug := range valid {
+		if !ValidRepoSlug(slug) {
+			t.Errorf("ValidRepoSlug(%q) = false, want true", slug)
+		}
+	}
+}
+
+func TestValidRepoSlug_Invalid(t *testing.T) {
+	t.Parallel()
+
+	invalid := []struct {
+		slug string
+		desc string
+	}{
+		{"", "empty string"},
+		{"noslash", "no slash"},
+		{"a/b/c", "too many segments"},
+		{"/repo", "empty owner"},
+		{"owner/", "empty repo"},
+		{"owner/ repo", "space in repo"},
+		{"own er/repo", "space in owner"},
+		{"https://github.com/owner/repo", "full URL"},
+		{"../repo", "path traversal in owner"},
+		{"owner/..", "path traversal in repo"},
+	}
+
+	for _, tc := range invalid {
+		if ValidRepoSlug(tc.slug) {
+			t.Errorf("ValidRepoSlug(%q) [%s] = true, want false", tc.slug, tc.desc)
+		}
+	}
+}
+
+func TestNormalizeRemoteURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"git@github.com:owner/repo.git", "owner/repo"},
+		{"git@github.com:owner/repo", "owner/repo"},
+		{"https://github.com/owner/repo.git", "owner/repo"},
+		{"https://github.com/owner/repo", "owner/repo"},
+		{"ssh://git@github.com/owner/repo.git", "owner/repo"},
+		{"ssh://git@github.com/owner/repo", "owner/repo"},
+		{"ssh://git@github.com:22/owner/repo.git", "owner/repo"},
+		{"owner/repo", "owner/repo"},
+		{"  git@github.com:owner/repo.git  ", "owner/repo"},
+		{"", ""},
+		{"https://github.com/owner/repo/", "owner/repo"},
+	}
+
+	for _, tc := range tests {
+		got := NormalizeRemoteURL(tc.input)
+		if got != tc.want {
+			t.Errorf("NormalizeRemoteURL(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}

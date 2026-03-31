@@ -65,24 +65,16 @@ func renderSessionsKeyword() string {
 
 // renderSessionLines renders the lines for a single DesiredSession.
 func renderSessionLines(s config.DesiredSession) []string {
-	var lines []string
-
-	// "    - name: <value>"
-	nameLine := renderSessionField("    - ", "name", s.Name)
-	lines = append(lines, nameLine)
-
-	// "      dir: <value>" (if non-empty)
+	lines := []string{renderSessionField("    - ", "name", s.Name)}
 	if s.Dir != "" {
-		dirLine := renderSessionField("      ", "dir", s.Dir)
-		lines = append(lines, dirLine)
+		lines = append(lines, renderSessionField("      ", "dir", s.Dir))
 	}
-
-	// "      cmd: <value>" (if non-empty)
+	if s.Repo != "" {
+		lines = append(lines, renderSessionField("      ", "repo", s.Repo))
+	}
 	if s.Cmd != "" {
-		cmdLine := renderSessionField("      ", "cmd", s.Cmd)
-		lines = append(lines, cmdLine)
+		lines = append(lines, renderSessionField("      ", "cmd", s.Cmd))
 	}
-
 	return lines
 }
 
