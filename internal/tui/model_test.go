@@ -162,11 +162,11 @@ func TestSortSessions(t *testing.T) {
 	}
 }
 
-func TestInitReturnsNil(t *testing.T) {
+func TestInitReturnsLatencyTick(t *testing.T) {
 	m := NewModel(3)
 	cmd := m.Init()
-	if cmd != nil {
-		t.Error("Init() should return nil")
+	if cmd == nil {
+		t.Error("Init() should return a latency tick command")
 	}
 }
 

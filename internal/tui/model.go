@@ -73,9 +73,10 @@ type Model struct {
 	editor              editor.Model        // config editor sub-model
 	wizard              editor.WizardModel  // first-run wizard sub-model
 	sshHosts            []sshconfig.Host    // parsed SSH config hosts
-	configChanged       bool                // set after editor save/delete
-	confirmDeleteTarget string              // host target pending delete confirmation
-	wizardConfig        *config.Config      // set when wizard completes
+	configChanged       bool                   // set after editor save/delete
+	confirmDeleteTarget string                 // host target pending delete confirmation
+	wizardConfig        *config.Config         // set when wizard completes
+	latency             map[string]time.Duration // host target -> last measured latency
 }
 
 // SessionBatchMsg delivers a batch of sessions from one host.
@@ -103,6 +104,7 @@ func NewModel(scanTotal int) Model {
 		width:     80,
 		height:    24,
 		matchInfo: make(map[string]matchInfo),
+		latency:   make(map[string]time.Duration),
 	}
 }
 
@@ -114,6 +116,7 @@ func NewModelWithSessions(sessions []Session, filter string) Model {
 		width:     80,
 		height:    24,
 		matchInfo: make(map[string]matchInfo),
+		latency:   make(map[string]time.Duration),
 	}
 	sortSessions(m.sessions)
 	if filter != "" {
@@ -131,7 +134,20 @@ func (m Model) Init() tea.Cmd {
 	if m.mode == ModeWizard {
 		return m.wizard.Init()
 	}
-	return nil
+	return latencyTickCmd()
+}
+
+// uniqueHosts returns deduplicated host targets from all sessions.
+func (m Model) uniqueHosts() []string {
+	seen := make(map[string]bool)
+	var hosts []string
+	for _, s := range m.sessions {
+		if !seen[s.Host] {
+			seen[s.Host] = true
+			hosts = append(hosts, s.Host)
+		}
+	}
+	return hosts
 }
 
 // WarpTarget returns the session the user chose, or nil if they quit.

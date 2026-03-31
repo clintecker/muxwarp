@@ -194,7 +194,7 @@ func (m Model) renderRow(idx int, cols columnWidths) string {
 	name := m.renderSessionName(s)
 	badge := renderBadge(s, m.width)
 	dots := renderWindows(s, m.width)
-	host := m.renderHostTag(s, m.width)
+	host := m.renderHostTag(s, m.width) + m.renderLatencyTag(s)
 
 	// Pad session name to align badge column.
 	namePad := cols.maxName - len(s.Name)

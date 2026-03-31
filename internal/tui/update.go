@@ -57,6 +57,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ScanDoneMsg:
 		m.scanning = false
+		hosts := m.uniqueHosts()
+		if len(hosts) > 0 {
+			return m, probeAllLatencies(hosts)
+		}
+		return m, nil
+
+	case latencyTickMsg:
+		hosts := m.uniqueHosts()
+		if len(hosts) == 0 {
+			return m, latencyTickCmd()
+		}
+		return m, tea.Batch(probeAllLatencies(hosts), latencyTickCmd())
+
+	case LatencyMsg:
+		for host, d := range msg.Results {
+			m.latency[host] = d
+		}
 		return m, nil
 	}
 
