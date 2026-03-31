@@ -8,13 +8,20 @@ LDFLAGS    := -s -w \
               -X main.commit=$(COMMIT) \
               -X main.date=$(DATE)
 
-.PHONY: all build lint test clean run check hooks
+.PHONY: all build build-pi install lint test clean run check hooks
 
 all: lint test build
 
 build:
 	@mkdir -p $(BIN_DIR)
 	go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(APP_NAME) ./cmd/muxwarp
+
+build-pi:
+	@mkdir -p $(BIN_DIR)
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(APP_NAME)-linux-arm64 ./cmd/muxwarp
+
+install: build
+	go install -ldflags "$(LDFLAGS)" ./cmd/muxwarp
 
 lint:
 	golangci-lint run ./...

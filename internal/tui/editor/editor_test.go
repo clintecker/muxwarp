@@ -69,7 +69,7 @@ func TestCycleFocus_Forward(t *testing.T) {
 	m.sessions = []config.DesiredSession{{Name: "test"}}
 
 	// Start at FocusHost (0), cycle forward through all.
-	expected := []Focus{FocusList, FocusName, FocusDir, FocusCmd, FocusHost}
+	expected := []Focus{FocusList, FocusName, FocusDir, FocusRepo, FocusCmd, FocusHost}
 	for _, want := range expected {
 		m = m.cycleFocus(1)
 		if m.GetFocus() != want {
@@ -84,7 +84,7 @@ func TestCycleFocus_Backward(t *testing.T) {
 	m.sessions = []config.DesiredSession{{Name: "test"}}
 
 	// Start at FocusHost (0), cycle backward.
-	expected := []Focus{FocusCmd, FocusDir, FocusName, FocusList, FocusHost}
+	expected := []Focus{FocusCmd, FocusRepo, FocusDir, FocusName, FocusList, FocusHost}
 	for _, want := range expected {
 		m = m.cycleFocus(-1)
 		if m.GetFocus() != want {

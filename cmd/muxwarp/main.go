@@ -131,19 +131,22 @@ func tuiMode(cfg *config.Config, timeoutSec string) {
 	}
 }
 
-// warpChild creates the session if needed, plays animations, runs ssh
-// as a child process, and prints the return message.
+// warpChild plays animations and runs ssh as a child process.
+// For ghost sessions, ensure-repo + create + send-keys + attach happen
+// in a single SSH connection.
 func warpChild(cfg *config.Config, target *tui.Session, termWidth int) {
 	logging.Log().Info("warp child", "host", target.Host, "session", target.Name, "is_ghost", target.IsGhost())
 
-	if err := maybeCreateSession(cfg, target, termWidth); err != nil {
-		fmt.Fprintf(os.Stderr, "create error: %v\n", err)
-		return
-	}
-
 	tui.PlayWarpAnimation(target.HostShort, target.Name, termWidth)
 
-	if err := ssh.ExecChild(target.Host, cfg.Defaults.Term, target.Name); err != nil {
+	var err error
+	if target.IsGhost() {
+		d := target.Desired
+		err = ssh.GhostWarpChild(target.Host, cfg.Defaults.Term, target.Name, d.Dir, d.Repo, d.Cmd)
+	} else {
+		err = ssh.ExecChild(target.Host, cfg.Defaults.Term, target.Name)
+	}
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "ssh error: %v\n", err)
 	}
 
@@ -181,24 +184,26 @@ func runTUIOnce(cfg *config.Config, timeoutSec string) (*tui.Session, int, bool)
 	return fm.WarpTarget(), fm.Width(), fm.ConfigChanged()
 }
 
-// scanAndSend runs the scanner and sends results to the TUI, injecting
-// ghost sessions for any desired sessions not found in the scan.
+// scanAndSend injects ghost sessions immediately from config, then scans
+// hosts in the background. As real sessions are found, matching ghosts are
+// removed via PromoteGhostMsg.
 func scanAndSend(ctx context.Context, cfg *config.Config, timeoutSec string, p *tea.Program) {
+	// Inject all ghosts up front so the list is populated instantly.
+	allGhosts := buildAllGhosts(cfg)
+	if len(allGhosts) > 0 {
+		logging.Log().Info("injecting ghosts", "count", len(allGhosts))
+		p.Send(tui.SessionBatchMsg{Host: "ghosts", Sessions: allGhosts})
+	}
+
 	logging.Log().Info("scan starting", "hosts", len(cfg.Hosts))
-	var found []tui.Session
 	_ = scanner.ScanAll(ctx, cfg.HostTargets(), 8, timeoutSec, func(host string, sessions []scanner.Session) {
 		batch := scannerToTUI(sessions)
-		found = append(found, batch...)
 		logging.Log().Debug("scan batch", "host", host, "sessions", len(batch))
-		p.Send(tui.SessionBatchMsg{Host: host, Sessions: batch})
+		// Send real sessions; the TUI will promote matching ghosts.
+		p.Send(tui.PromoteGhostMsg{Host: host, Sessions: batch})
 	})
 
-	ghosts := buildGhosts(cfg, found)
-	if len(ghosts) > 0 {
-		logging.Log().Info("injecting ghosts", "count", len(ghosts))
-		p.Send(tui.SessionBatchMsg{Host: "ghosts", Sessions: ghosts})
-	}
-	logging.Log().Info("scan complete", "found", len(found), "ghosts", len(ghosts))
+	logging.Log().Info("scan complete")
 	p.Send(tui.ScanDoneMsg{})
 }
 
@@ -266,43 +271,39 @@ func directWarpMultiple(cfg *config.Config, allSessions []tui.Session, pattern, 
 }
 
 // warp plays the animation and execs into ssh. Never returns on success.
+// For ghost sessions, everything happens in a single SSH connection.
 func warp(cfg *config.Config, target *tui.Session) {
 	logging.Log().Info("warp exec-replace", "host", target.Host, "session", target.Name, "is_ghost", target.IsGhost())
 
-	if err := maybeCreateSession(cfg, target, 80); err != nil {
-		fmt.Fprintf(os.Stderr, "create error: %v\n", err)
-		os.Exit(1)
-	}
-
 	tui.PlayWarpAnimation(target.HostShort, target.Name, 80)
 
-	if err := ssh.ExecReplace(target.Host, cfg.Defaults.Term, target.Name); err != nil {
-		fmt.Fprintf(os.Stderr, "exec error: %v\n", err)
+	var err error
+	if target.IsGhost() {
+		d := target.Desired
+		err = ssh.GhostWarpReplace(target.Host, cfg.Defaults.Term, target.Name, d.Dir, d.Repo, d.Cmd)
+	} else {
+		err = ssh.ExecReplace(target.Host, cfg.Defaults.Term, target.Name)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ssh error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-// maybeCreateSession creates a remote tmux session if the target is a ghost.
-func maybeCreateSession(cfg *config.Config, target *tui.Session, termWidth int) error {
-	if !target.IsGhost() {
-		return nil
+// buildAllGhosts creates ghost sessions for ALL desired sessions in the config.
+// Called before scanning so the list is populated immediately.
+func buildAllGhosts(cfg *config.Config) []tui.Session {
+	var ghosts []tui.Session
+	for _, h := range cfg.Hosts {
+		for _, ds := range h.Sessions {
+			ghosts = append(ghosts, newGhostSession(h.Target, ds))
+		}
 	}
-
-	logging.Log().Info("creating ghost session",
-		"host", target.Host, "session", target.Name,
-		"dir", target.Desired.Dir, "cmd", target.Desired.Cmd)
-
-	tui.PlayCreationAnimation(target.HostShort, target.Name, termWidth)
-	err := ssh.CreateSession(target.Host, cfg.Defaults.Term, target.Name, target.Desired.Dir, target.Desired.Cmd)
-	if err != nil {
-		logging.Log().Error("ghost session creation failed", "error", err)
-	} else {
-		logging.Log().Info("ghost session created")
-	}
-	return err
+	return ghosts
 }
 
 // buildGhosts creates ghost sessions for desired sessions not found in the scan.
+// Used by directWarp where we scan first, then add missing ghosts.
 func buildGhosts(cfg *config.Config, found []tui.Session) []tui.Session {
 	var ghosts []tui.Session
 	for _, h := range cfg.Hosts {
@@ -344,7 +345,7 @@ func newGhostSession(target string, ds config.DesiredSession) tui.Session {
 		Host:      target,
 		HostShort: ssh.HostShort(target),
 		Name:      ds.Name,
-		Desired:   &tui.DesiredInfo{Dir: ds.Dir, Cmd: ds.Cmd},
+		Desired:   &tui.DesiredInfo{Dir: ds.Dir, Repo: ds.Repo, Cmd: ds.Cmd},
 	}
 }
 

@@ -22,10 +22,11 @@ const (
 	FocusList // session mini-list
 	FocusName
 	FocusDir
+	FocusRepo
 	FocusCmd
 )
 
-const focusCount = 5
+const focusCount = 6
 
 // EditorSavedMsg is sent when the user saves the editor form.
 type EditorSavedMsg struct {
@@ -41,6 +42,7 @@ type Model struct {
 	hostInput     textinput.Model
 	nameInput     textinput.Model
 	dirInput      textinput.Model
+	repoInput     textinput.Model
 	cmdInput      textinput.Model
 	focus         Focus
 	sessions      []config.DesiredSession
@@ -59,6 +61,7 @@ func New(sshHosts []sshconfig.Host, width, height int) Model {
 		hostInput: newHostInput(sshHosts),
 		nameInput: newSessionNameInput(),
 		dirInput:  newDirInput(),
+		repoInput: newRepoInput(),
 		cmdInput:  newCmdInput(),
 		editIndex: -1,
 		width:     width,
@@ -227,6 +230,8 @@ func (m Model) handleSessionFieldKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.nameInput, cmd = m.nameInput.Update(msg)
 	case FocusDir:
 		m.dirInput, cmd = m.dirInput.Update(msg)
+	case FocusRepo:
+		m.repoInput, cmd = m.repoInput.Update(msg)
 	case FocusCmd:
 		m.cmdInput, cmd = m.cmdInput.Update(msg)
 	}
@@ -274,6 +279,7 @@ func (m *Model) focusField(f Focus) {
 	m.hostInput.Blur()
 	m.nameInput.Blur()
 	m.dirInput.Blur()
+	m.repoInput.Blur()
 	m.cmdInput.Blur()
 	m.focus = f
 	switch f {
@@ -283,6 +289,8 @@ func (m *Model) focusField(f Focus) {
 		m.nameInput.Focus()
 	case FocusDir:
 		m.dirInput.Focus()
+	case FocusRepo:
+		m.repoInput.Focus()
 	case FocusCmd:
 		m.cmdInput.Focus()
 	}
@@ -297,14 +305,24 @@ func (m Model) trySave() (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Validate all session names.
+	// Validate all sessions.
 	for _, s := range m.sessions {
 		if s.Name == "" {
 			continue // empty sessions are stripped
 		}
 		if !ssh.ValidSessionName(s.Name) {
-			m.saveErr = fmt.Sprintf("invalid session name %q — use [A-Za-z0-9._-]", s.Name)
+			m.saveErr = fmt.Sprintf("invalid session name %q — avoid control characters and colons", s.Name)
 			return m, nil
+		}
+		if s.Repo != "" {
+			if s.Dir == "" {
+				m.saveErr = fmt.Sprintf("session %q: repo requires a working directory", s.Name)
+				return m, nil
+			}
+			if !ssh.ValidRepoSlug(s.Repo) {
+				m.saveErr = fmt.Sprintf("invalid repo slug %q — use owner/repo format", s.Repo)
+				return m, nil
+			}
 		}
 	}
 
@@ -333,6 +351,7 @@ func (m *Model) loadSession() {
 		s := m.sessions[m.sessionCursor]
 		m.nameInput.SetValue(s.Name)
 		m.dirInput.SetValue(s.Dir)
+		m.repoInput.SetValue(s.Repo)
 		m.cmdInput.SetValue(s.Cmd)
 	}
 }
@@ -358,6 +377,7 @@ func (m *Model) deleteSession() {
 	} else {
 		m.nameInput.SetValue("")
 		m.dirInput.SetValue("")
+		m.repoInput.SetValue("")
 		m.cmdInput.SetValue("")
 		m.focusField(FocusHost)
 	}
@@ -367,6 +387,7 @@ func (m *Model) syncSessionFromInputs() {
 	if m.sessionCursor >= 0 && m.sessionCursor < len(m.sessions) {
 		m.sessions[m.sessionCursor].Name = strings.TrimSpace(m.nameInput.Value())
 		m.sessions[m.sessionCursor].Dir = strings.TrimSpace(m.dirInput.Value())
+		m.sessions[m.sessionCursor].Repo = strings.TrimSpace(m.repoInput.Value())
 		m.sessions[m.sessionCursor].Cmd = strings.TrimSpace(m.cmdInput.Value())
 	}
 }
@@ -399,26 +420,19 @@ func (m Model) renderSessionListSection() string {
 		if name == "" {
 			name = "(unnamed)"
 		}
-		line := fmt.Sprintf("    %s", name)
-		if s.Dir != "" {
-			line += "  " + helperStyle.Render(s.Dir)
-		}
 
-		if i == m.sessionCursor && m.focus == FocusList {
-			b.WriteString(sessionSelectedStyle.Render("  ▸ " + name))
-			if s.Dir != "" {
-				b.WriteString("  " + helperStyle.Render(s.Dir))
-			}
-		} else if i == m.sessionCursor {
-			b.WriteString(labelStyle.Render("  ▸ " + name))
-			if s.Dir != "" {
-				b.WriteString("  " + helperStyle.Render(s.Dir))
-			}
-		} else {
-			b.WriteString(sessionNormalStyle.Render("    " + name))
-			if s.Dir != "" {
-				b.WriteString("  " + helperStyle.Render(s.Dir))
-			}
+		var styledName string
+		switch {
+		case i == m.sessionCursor && m.focus == FocusList:
+			styledName = sessionSelectedStyle.Render("  ▸ " + name)
+		case i == m.sessionCursor:
+			styledName = labelStyle.Render("  ▸ " + name)
+		default:
+			styledName = sessionNormalStyle.Render("    " + name)
+		}
+		b.WriteString(styledName)
+		if s.Dir != "" {
+			b.WriteString("  " + helperStyle.Render(s.Dir))
 		}
 	}
 
@@ -456,6 +470,12 @@ func (m Model) renderSessionFieldsSection() string {
 	b.WriteString(helperStyle.Render(" (optional)"))
 	b.WriteString("\n")
 	b.WriteString(m.renderInput(m.dirInput, FocusDir))
+	b.WriteString("\n\n")
+
+	b.WriteString(labelStyle.Render("  Repo"))
+	b.WriteString(helperStyle.Render(" (optional, GitHub owner/repo)"))
+	b.WriteString("\n")
+	b.WriteString(m.renderInput(m.repoInput, FocusRepo))
 	b.WriteString("\n\n")
 
 	b.WriteString(labelStyle.Render("  Command"))
@@ -498,6 +518,8 @@ func (m Model) updateFocusedInput(msg tea.Msg) (Model, tea.Cmd) {
 		m.nameInput, cmd = m.nameInput.Update(msg)
 	case FocusDir:
 		m.dirInput, cmd = m.dirInput.Update(msg)
+	case FocusRepo:
+		m.repoInput, cmd = m.repoInput.Update(msg)
 	case FocusCmd:
 		m.cmdInput, cmd = m.cmdInput.Update(msg)
 	}
@@ -510,19 +532,23 @@ func sendCanceled() tea.Cmd {
 
 // --- Input constructors ---
 
-func newHostInput(sshHosts []sshconfig.Host) textinput.Model {
+// newInput creates a textinput with common defaults: no prompt, right-arrow
+// for suggestion acceptance (Tab is reserved for focus cycling).
+func newInput(placeholder string, charLimit int) textinput.Model {
 	ti := textinput.New()
-	ti.Placeholder = "user@hostname"
+	ti.Placeholder = placeholder
 	ti.Prompt = ""
-	ti.CharLimit = 256
-	ti.ShowSuggestions = true
-
-	// Override AcceptSuggestion to right-arrow (Tab is for focus cycling).
+	ti.CharLimit = charLimit
 	km := textinput.DefaultKeyMap()
 	km.AcceptSuggestion = key.NewBinding(key.WithKeys("right"))
 	ti.KeyMap = km
+	return ti
+}
 
-	// Set SSH host aliases as suggestions.
+func newHostInput(sshHosts []sshconfig.Host) textinput.Model {
+	ti := newInput("user@hostname", 256)
+	ti.ShowSuggestions = true
+
 	aliases := make([]string, len(sshHosts))
 	for i, h := range sshHosts {
 		aliases[i] = h.Alias
@@ -532,39 +558,10 @@ func newHostInput(sshHosts []sshconfig.Host) textinput.Model {
 	return ti
 }
 
-func newSessionNameInput() textinput.Model {
-	ti := textinput.New()
-	ti.Placeholder = "session-name"
-	ti.Prompt = ""
-	ti.CharLimit = 256
-	// Override AcceptSuggestion to right-arrow.
-	km := textinput.DefaultKeyMap()
-	km.AcceptSuggestion = key.NewBinding(key.WithKeys("right"))
-	ti.KeyMap = km
-	return ti
-}
-
-func newDirInput() textinput.Model {
-	ti := textinput.New()
-	ti.Placeholder = "~/code/project"
-	ti.Prompt = ""
-	ti.CharLimit = 512
-	km := textinput.DefaultKeyMap()
-	km.AcceptSuggestion = key.NewBinding(key.WithKeys("right"))
-	ti.KeyMap = km
-	return ti
-}
-
-func newCmdInput() textinput.Model {
-	ti := textinput.New()
-	ti.Placeholder = "nvim"
-	ti.Prompt = ""
-	ti.CharLimit = 512
-	km := textinput.DefaultKeyMap()
-	km.AcceptSuggestion = key.NewBinding(key.WithKeys("right"))
-	ti.KeyMap = km
-	return ti
-}
+func newSessionNameInput() textinput.Model { return newInput("session-name", 256) }
+func newDirInput() textinput.Model         { return newInput("~/code/project", 512) }
+func newRepoInput() textinput.Model        { return newInput("owner/repo", 256) }
+func newCmdInput() textinput.Model         { return newInput("nvim", 512) }
 
 // Resize updates the editor dimensions.
 func (m *Model) Resize(width, height int) {
@@ -572,7 +569,7 @@ func (m *Model) Resize(width, height int) {
 	m.height = height
 }
 
-// Focus returns the current focus.
+// GetFocus returns the current focus.
 func (m Model) GetFocus() Focus { return m.focus }
 
 // Sessions returns the current session list.

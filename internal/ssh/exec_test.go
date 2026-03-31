@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -195,6 +196,66 @@ func TestSingleQuote(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("singleQuote(%q) = %q, want %q", tc.input, got, tc.want)
 		}
+	}
+}
+
+func TestBuildEnsureRepoArgs(t *testing.T) {
+	t.Parallel()
+
+	args := BuildEnsureRepoArgs("clint@indigo", "~/code/muxwarp", "clintecker/muxwarp")
+
+	// Should be a single SSH call with sh -c.
+	assertArgContains(t, args, "clint@indigo", "target")
+	assertArgContains(t, args, "sh", "shell")
+	assertArgContains(t, args, "-c", "shell flag")
+
+	// The script arg should contain mkdir, git remote, and gh repo clone.
+	script := args[len(args)-1]
+	if !strings.Contains(script, "mkdir -p") {
+		t.Errorf("script missing 'mkdir -p': %s", script)
+	}
+	if !strings.Contains(script, "git -C") {
+		t.Errorf("script missing 'git -C': %s", script)
+	}
+	if !strings.Contains(script, "gh repo clone") {
+		t.Errorf("script missing 'gh repo clone': %s", script)
+	}
+}
+
+func TestShellQuoteDir(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"~/code/proj", `"$HOME/code/proj"`},
+		{"~/code/my proj", `"$HOME/code/my proj"`},
+		{"/absolute/path", "'/absolute/path'"},
+		{"relative/path", "'relative/path'"},
+	}
+
+	for _, tc := range tests {
+		got := shellQuoteDir(tc.input)
+		if got != tc.want {
+			t.Errorf("shellQuoteDir(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestBuildEnsureRepoScript_ContainsRepo(t *testing.T) {
+	t.Parallel()
+
+	script := BuildEnsureRepoScript("~/code/proj", "owner/repo")
+	if !strings.Contains(script, "owner/repo") {
+		t.Errorf("script missing repo slug: %s", script)
+	}
+	// Tilde should be replaced with $HOME for proper expansion.
+	if !strings.Contains(script, "$HOME/code/proj") {
+		t.Errorf("script should use $HOME instead of ~: %s", script)
+	}
+	if strings.Contains(script, "'~/code/proj'") {
+		t.Errorf("script should not single-quote tilde paths: %s", script)
 	}
 }
 
