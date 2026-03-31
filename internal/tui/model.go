@@ -3,6 +3,7 @@ package tui
 import (
 	"cmp"
 	"slices"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -244,34 +245,54 @@ func attachedRank(s Session) int {
 // Ghosts that match a real session (same host+name) are replaced; ghosts with
 // no match are kept. Real sessions with no matching ghost are added.
 func (m *Model) promoteGhosts(msg PromoteGhostMsg) {
-	// Build set of real session names for this host.
-	realNames := make(map[string]Session, len(msg.Sessions))
-	for _, s := range msg.Sessions {
-		realNames[s.Name] = s
-	}
-
-	// Replace matching ghosts with real sessions, track which were matched.
-	matched := make(map[string]bool)
-	for i, s := range m.sessions {
-		if s.Host == msg.Host && s.IsGhost() {
-			if real, ok := realNames[s.Name]; ok {
-				m.sessions[i] = real
-				matched[s.Name] = true
-			}
-		}
-	}
-
-	// Add any real sessions that had no matching ghost.
-	for _, s := range msg.Sessions {
-		if !matched[s.Name] {
-			m.sessions = append(m.sessions, s)
-		}
-	}
+	scanned := buildScannedMap(msg.Sessions)
+	matched := m.replaceMatchingGhosts(msg.Host, scanned)
+	m.appendUnmatched(msg.Sessions, matched)
 
 	sortSessions(m.sessions)
 	m.scanDone++
 	m.applyFilter()
 	m.ensureViewport()
+}
+
+// buildScannedMap builds a lookup of session name -> Session from scan results.
+func buildScannedMap(sessions []Session) map[string]Session {
+	result := make(map[string]Session, len(sessions))
+	for _, s := range sessions {
+		result[s.Name] = s
+	}
+	return result
+}
+
+// replaceMatchingGhosts replaces ghost sessions with scanned sessions and returns matched names.
+func (m *Model) replaceMatchingGhosts(host string, scanned map[string]Session) map[string]bool {
+	matched := make(map[string]bool)
+	for i, s := range m.sessions {
+		if actual, ok := m.ghostMatch(i, host, scanned); ok {
+			m.sessions[i] = actual
+			matched[s.Name] = true
+		}
+	}
+	return matched
+}
+
+// ghostMatch returns the scanned session if m.sessions[i] is a ghost for the given host.
+func (m *Model) ghostMatch(i int, host string, scanned map[string]Session) (Session, bool) {
+	s := m.sessions[i]
+	if s.Host != host || !s.IsGhost() {
+		return Session{}, false
+	}
+	actual, ok := scanned[s.Name]
+	return actual, ok
+}
+
+// appendUnmatched adds scanned sessions that had no matching ghost.
+func (m *Model) appendUnmatched(sessions []Session, matched map[string]bool) {
+	for _, s := range sessions {
+		if !matched[s.Name] {
+			m.sessions = append(m.sessions, s)
+		}
+	}
 }
 
 // allTags returns all unique tags across all sessions, sorted alphabetically.

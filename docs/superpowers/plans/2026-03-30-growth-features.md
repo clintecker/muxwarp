@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Session Metadata — Scanner Changes
+## Task 1: Session Metadata — Scanner Changes
 
 **Files:**
 - Modify: `internal/ssh/exec.go:34-42` (BuildScanArgs format string)
@@ -191,7 +191,7 @@ output for backward compatibility."
 
 ---
 
-### Task 2: Session Metadata — TUI Time Formatting
+## Task 2: Session Metadata — TUI Time Formatting
 
 **Files:**
 - Create: `internal/tui/timeformat.go`
@@ -310,7 +310,7 @@ git commit -m "feat: add compact time formatting for session metadata"
 
 ---
 
-### Task 3: Session Metadata — TUI Display
+## Task 3: Session Metadata — TUI Display
 
 **Files:**
 - Modify: `internal/tui/model.go:32-39` (Session struct — add Created, LastActivity, Tags)
@@ -626,7 +626,7 @@ terminal widths."
 
 ---
 
-### Task 4: Host Tags — Config
+## Task 4: Host Tags — Config
 
 **Files:**
 - Modify: `internal/config/config.go:23-26` (HostEntry struct)
@@ -838,7 +838,7 @@ flow style for compact output."
 
 ---
 
-### Task 5: Host Tags — TUI Tag Filter
+## Task 5: Host Tags — TUI Tag Filter
 
 **Files:**
 - Modify: `internal/tui/model.go` (add tagFilter, allTags fields + ModeTagPicker)
@@ -1224,7 +1224,7 @@ Tags propagated from config through scanner to TUI."
 
 ---
 
-### Task 6: `muxwarp init` Command
+## Task 6: `muxwarp init` Command
 
 **Files:**
 - Create: `internal/config/init.go`
@@ -1461,7 +1461,7 @@ Reads ~/.ssh/config, filters out git hosting services, and writes
 
 ---
 
-### Task 7: Shell Completions
+## Task 7: Shell Completions
 
 **Files:**
 - Create: `completions/muxwarp.bash`
@@ -1668,7 +1668,7 @@ and argument values."
 
 ---
 
-### Task 8: Homebrew Tap — GoReleaser Config
+## Task 8: Homebrew Tap — GoReleaser Config
 
 **Files:**
 - Modify: `.goreleaser.yml`
@@ -1744,7 +1744,7 @@ and include shell completions in release archives."
 
 ---
 
-### Task 9: VHS Demo Environment
+## Task 9: VHS Demo Environment
 
 **Files:**
 - Create: `demo/Dockerfile`
@@ -1878,7 +1878,7 @@ hosts:
 
 Create `demo/demo.tape`:
 
-```
+```vhs
 Output demo/demo.gif
 
 Set Shell "bash"
@@ -1939,7 +1939,7 @@ demo-record: build
 
 Add to `.gitignore` (create if needed):
 
-```
+```gitignore
 demo/demo.gif
 ```
 
@@ -1967,7 +1967,7 @@ muxwarp without real servers. VHS tape for recording demo GIF."
 
 ---
 
-### Task 10: Final Verification and PR
+## Task 10: Final Verification and PR
 
 - [ ] **Step 1: Run full test suite**
 

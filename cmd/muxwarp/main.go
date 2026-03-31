@@ -427,7 +427,7 @@ func buildAllGhosts(cfg *config.Config) []tui.Session {
 	var ghosts []tui.Session
 	for _, h := range cfg.Hosts {
 		for _, ds := range h.Sessions {
-			ghosts = append(ghosts, newGhostSession(h.Target, ds))
+			ghosts = append(ghosts, newGhostSession(h.Target, h.Tags, ds))
 		}
 	}
 	return ghosts

@@ -13,78 +13,118 @@ import (
 // Update implements tea.Model. It handles key presses, window resize events,
 // scanner messages, and editor messages.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if result, cmd, handled := m.handleEditorMsg(msg); handled {
+		return result, cmd
+	}
+	return m.handleCoreMsg(msg)
+}
+
+// handleEditorMsg processes editor and wizard messages. Returns handled=true if consumed.
+func (m Model) handleEditorMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		switch m.mode {
-		case ModeEdit:
-			m.editor.Resize(msg.Width, msg.Height)
-		case ModeWizard:
-			m.wizard.WizardResize(msg.Width, msg.Height)
-		}
-		m.ensureViewport()
-		return m, nil
-
-	case editor.EditorSavedMsg:
-		return m.handleEditorSaved(msg)
-
-	case editor.EditorCanceledMsg:
+	case editor.SavedMsg:
+		result, cmd := m.handleEditorSaved(msg)
+		return result, cmd, true
+	case editor.CanceledMsg:
 		m.mode = ModeList
-		return m, nil
-
+		return m, nil, true
 	case editor.WizardSavedMsg:
 		m.wizardConfig = &msg.Config
-		return m, tea.Quit
-
+		return m, tea.Quit, true
 	case editor.WizardQuitMsg:
-		return m, tea.Quit
+		return m, tea.Quit, true
+	}
+	return m, nil, false
+}
 
+// handleCoreMsg processes non-editor messages (keys, scan, latency, resize).
+func (m Model) handleCoreMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		return m.handleWindowSize(msg)
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
-
 	case SessionBatchMsg:
-		m.sessions = append(m.sessions, msg.Sessions...)
-		sortSessions(m.sessions)
-		m.scanDone++
-		m.applyFilter()
-		m.ensureViewport()
-		return m, nil
-
+		return m.handleSessionBatch(msg)
 	case PromoteGhostMsg:
 		m.promoteGhosts(msg)
 		return m, nil
-
-	case ScanDoneMsg:
-		m.scanning = false
-		hosts := m.uniqueHosts()
-		if len(hosts) > 0 {
-			return m, probeAllLatencies(hosts)
-		}
-		return m, nil
-
-	case latencyTickMsg:
-		hosts := m.uniqueHosts()
-		if len(hosts) == 0 {
-			return m, latencyTickCmd()
-		}
-		return m, tea.Batch(probeAllLatencies(hosts), latencyTickCmd())
-
-	case LatencyMsg:
-		for host, d := range msg.Results {
-			m.latency[host] = d
-		}
-		return m, nil
 	}
+	return m.handleAsyncMsg(msg)
+}
 
-	// Forward other messages (cursor blink, etc.) to sub-models.
+// handleAsyncMsg processes scan completion and latency messages.
+func (m Model) handleAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case ScanDoneMsg:
+		return m.handleScanDone()
+	case latencyTickMsg:
+		return m.handleLatencyTick()
+	case LatencyMsg:
+		return m.handleLatencyMsg(msg)
+	}
+	return m.forwardToSubModel(msg)
+}
+
+// handleWindowSize processes terminal resize events.
+func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
+	m.width = msg.Width
+	m.height = msg.Height
+	switch m.mode {
+	case ModeEdit:
+		m.editor.Resize(msg.Width, msg.Height)
+	case ModeWizard:
+		m.wizard.WizardResize(msg.Width, msg.Height)
+	}
+	m.ensureViewport()
+	return m, nil
+}
+
+// handleSessionBatch processes a batch of sessions from a single host.
+func (m Model) handleSessionBatch(msg SessionBatchMsg) (tea.Model, tea.Cmd) {
+	m.sessions = append(m.sessions, msg.Sessions...)
+	sortSessions(m.sessions)
+	m.scanDone++
+	m.applyFilter()
+	m.ensureViewport()
+	return m, nil
+}
+
+// handleScanDone processes the scan completion signal.
+func (m Model) handleScanDone() (tea.Model, tea.Cmd) {
+	m.scanning = false
+	hosts := m.uniqueHosts()
+	if len(hosts) > 0 {
+		return m, probeAllLatencies(hosts)
+	}
+	return m, nil
+}
+
+// handleLatencyTick processes a periodic latency measurement tick.
+func (m Model) handleLatencyTick() (tea.Model, tea.Cmd) {
+	hosts := m.uniqueHosts()
+	if len(hosts) == 0 {
+		return m, latencyTickCmd()
+	}
+	return m, tea.Batch(probeAllLatencies(hosts), latencyTickCmd())
+}
+
+// handleLatencyMsg processes latency measurement results.
+func (m Model) handleLatencyMsg(msg LatencyMsg) (tea.Model, tea.Cmd) {
+	for host, d := range msg.Results {
+		m.latency[host] = d
+	}
+	return m, nil
+}
+
+// forwardToSubModel delegates messages to the active sub-model.
+func (m Model) forwardToSubModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.mode {
 	case ModeEdit:
 		return m.updateEditor(msg)
 	case ModeWizard:
 		return m.updateWizard(msg)
 	}
-
 	return m, nil
 }
 
@@ -348,7 +388,7 @@ func (m Model) updateWizard(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // handleEditorSaved persists the saved config entry and restarts the TUI.
-func (m Model) handleEditorSaved(msg editor.EditorSavedMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleEditorSaved(msg editor.SavedMsg) (tea.Model, tea.Cmd) {
 	if m.config == nil {
 		m.mode = ModeList
 		return m, nil
@@ -356,16 +396,7 @@ func (m Model) handleEditorSaved(msg editor.EditorSavedMsg) (tea.Model, tea.Cmd)
 
 	logging.Log().Info("editor saved", "target", msg.Entry.Target, "sessions", len(msg.Entry.Sessions))
 
-	if msg.EditIndex >= 0 && msg.EditIndex < len(m.config.Hosts) {
-		m.config.Hosts[msg.EditIndex] = msg.Entry
-	} else {
-		// Adding: merge into existing host if target already configured.
-		if idx := findHostByTarget(m.config.Hosts, msg.Entry.Target); idx >= 0 {
-			m.config.Hosts[idx].Sessions = mergeSessions(m.config.Hosts[idx].Sessions, msg.Entry.Sessions)
-		} else {
-			m.config.Hosts = append(m.config.Hosts, msg.Entry)
-		}
-	}
+	m.applyEditorEntry(msg)
 
 	if err := config.Save(m.config, m.configPath); err != nil {
 		m.mode = ModeList
@@ -374,6 +405,24 @@ func (m Model) handleEditorSaved(msg editor.EditorSavedMsg) (tea.Model, tea.Cmd)
 
 	m.configChanged = true
 	return m, tea.Quit
+}
+
+// applyEditorEntry updates or adds the entry from the editor into the config.
+func (m *Model) applyEditorEntry(msg editor.SavedMsg) {
+	if msg.EditIndex >= 0 && msg.EditIndex < len(m.config.Hosts) {
+		m.config.Hosts[msg.EditIndex] = msg.Entry
+		return
+	}
+	m.mergeOrAppendEntry(msg.Entry)
+}
+
+// mergeOrAppendEntry merges sessions into an existing host or appends a new one.
+func (m *Model) mergeOrAppendEntry(entry config.HostEntry) {
+	if idx := findHostByTarget(m.config.Hosts, entry.Target); idx >= 0 {
+		m.config.Hosts[idx].Sessions = mergeSessions(m.config.Hosts[idx].Sessions, entry.Sessions)
+	} else {
+		m.config.Hosts = append(m.config.Hosts, entry)
+	}
 }
 
 // findHostByTarget returns the index of the host with the given target, or -1.

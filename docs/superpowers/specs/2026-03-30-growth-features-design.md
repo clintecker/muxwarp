@@ -21,7 +21,7 @@ Parse these as `int64` from the tab-separated output. If missing or unparseable 
 
 Full width (>=80 cols):
 
-```
+```text
 ▸  api-server   ◆ LIVE 2↗  ▪▪▪▪  3d  5m ago   atlas
    web-dev      ◇ IDLE     ▪▪    2w  1d ago    atlas
    monitoring   ◆ LIVE     ▪     6h  now       forge
@@ -110,7 +110,7 @@ The config editor (`internal/tui/editor/`) gains a tags field for host entries. 
 
 New subcommand recognized in `main.go` flag parsing:
 
-```
+```text
 muxwarp init [--force]
 ```
 
@@ -202,7 +202,7 @@ archives:
 
 ### Docker Setup (`demo/`)
 
-```
+```text
 demo/
   Dockerfile          # Alpine + openssh-server + tmux
   docker-compose.yml  # 4 containers on ports 2201-2204

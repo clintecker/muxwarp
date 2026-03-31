@@ -112,8 +112,23 @@ func (m WizardModel) handleSessionStepKey(msg tea.KeyPressMsg) (WizardModel, tea
 }
 
 func (m WizardModel) saveWizard(includeSession bool) (WizardModel, tea.Cmd) {
+	if includeSession {
+		if err := m.validateWizardSession(); err != "" {
+			m.saveErr = err
+			return m, nil
+		}
+	}
 	cfg := m.buildConfig(includeSession)
 	return m, func() tea.Msg { return WizardSavedMsg{Config: cfg} }
+}
+
+// validateWizardSession checks the wizard session fields and returns an error message or "".
+func (m WizardModel) validateWizardSession() string {
+	name := strings.TrimSpace(m.nameInput.Value())
+	dir := strings.TrimSpace(m.dirInput.Value())
+	cmd := strings.TrimSpace(m.cmdInput.Value())
+
+	return validateSessionEntry(config.DesiredSession{Name: name, Dir: dir, Cmd: cmd})
 }
 
 func (m WizardModel) handleWizardTab(k string) WizardModel {
@@ -230,8 +245,13 @@ func (m WizardModel) renderSessionStep(b *strings.Builder) {
 	b.WriteString(helperStyle.Render(" (optional)"))
 	b.WriteString("\n")
 	b.WriteString(m.renderWizardInput(m.cmdInput, 2))
-	b.WriteString("\n\n")
 
+	if m.saveErr != "" {
+		b.WriteString("\n")
+		b.WriteString(errorStyle.Render("  " + m.saveErr))
+	}
+
+	b.WriteString("\n\n")
 	b.WriteString(footerHintStyle.Render("  enter save │ esc skip │ tab next field"))
 }
 

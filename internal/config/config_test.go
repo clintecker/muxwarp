@@ -650,7 +650,10 @@ func TestSave_CreatesNewFile(t *testing.T) {
 
 	t.Run("file_perms", func(t *testing.T) { assertFilePerms(t, cfgPath, 0o600) })
 	t.Run("loads_correctly", func(t *testing.T) {
-		loaded := saveAndLoad(t, cfg)
+		loaded, err := Load(cfgPath)
+		if err != nil {
+			t.Fatalf("Load() error: %v", err)
+		}
 		assertString(t, "hosts[0].Target", loaded.Hosts[0].Target, "server1")
 	})
 }

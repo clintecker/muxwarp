@@ -28,14 +28,14 @@ const (
 
 const focusCount = 6
 
-// EditorSavedMsg is sent when the user saves the editor form.
-type EditorSavedMsg struct {
+// SavedMsg is sent when the user saves the editor form.
+type SavedMsg struct {
 	Entry     config.HostEntry
 	EditIndex int // -1 for new host
 }
 
-// EditorCanceledMsg is sent when the user cancels the editor.
-type EditorCanceledMsg struct{}
+// CanceledMsg is sent when the user cancels the editor.
+type CanceledMsg struct{}
 
 // Model is the config editor sub-model.
 type Model struct {
@@ -82,27 +82,28 @@ func NewForEdit(entry config.HostEntry, index int, selectedSession string, sshHo
 	m.sessions = make([]config.DesiredSession, len(entry.Sessions))
 	copy(m.sessions, entry.Sessions)
 
-	// Pre-select or create the requested session.
-	if selectedSession != "" {
-		found := false
-		for i, s := range m.sessions {
-			if s.Name == selectedSession {
-				m.sessionCursor = i
-				found = true
-				break
-			}
-		}
-		if !found {
-			m.sessions = append(m.sessions, config.DesiredSession{Name: selectedSession})
-			m.sessionCursor = len(m.sessions) - 1
-		}
-	}
+	m.preselectSession(selectedSession)
 
 	if len(m.sessions) > 0 {
 		m.loadSession()
 		m.focusField(FocusList)
 	}
 	return m
+}
+
+// preselectSession selects an existing session by name, or creates one if not found.
+func (m *Model) preselectSession(name string) {
+	if name == "" {
+		return
+	}
+	for i, s := range m.sessions {
+		if s.Name == name {
+			m.sessionCursor = i
+			return
+		}
+	}
+	m.sessions = append(m.sessions, config.DesiredSession{Name: name})
+	m.sessionCursor = len(m.sessions) - 1
 }
 
 // Init implements tea.Model.
@@ -112,8 +113,7 @@ func (m Model) Init() tea.Cmd {
 
 // Update handles messages for the editor.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
+	if msg, ok := msg.(tea.KeyPressMsg); ok {
 		return m.handleKey(msg)
 	}
 	// Delegate to focused textinput for non-key messages (blink, etc.).
@@ -153,7 +153,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return updated, cmd
 	}
 
-	// Delegate by focus.
+	return m.handleFocusedKey(msg)
+}
+
+// handleFocusedKey delegates key events to the handler for the currently focused field.
+func (m Model) handleFocusedKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	switch m.focus {
 	case FocusHost:
 		return m.handleHostKey(msg)
@@ -173,15 +177,21 @@ func (m Model) handleGlobalKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 	case "esc":
 		return m, sendCanceled(), true
 	case "tab":
-		if m.focus == FocusHost && len(m.sessions) == 0 {
-			m.addSession()
-			return m, nil, true
-		}
-		return m.cycleFocus(1), nil, true
+		updated := m.handleTab()
+		return updated, nil, true
 	case "shift+tab":
 		return m.cycleFocus(-1), nil, true
 	}
 	return m, nil, false
+}
+
+// handleTab handles the tab key: auto-creates a session if needed, otherwise cycles focus.
+func (m Model) handleTab() Model {
+	if m.focus == FocusHost && len(m.sessions) == 0 {
+		m.addSession()
+		return m
+	}
+	return m.cycleFocus(1)
 }
 
 func (m Model) handleHostKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
@@ -193,34 +203,58 @@ func (m Model) handleHostKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 
 func (m Model) handleListKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	k := msg.String()
-	switch k {
-	case "up", "k":
-		if m.sessionCursor > 0 {
-			m.sessionCursor--
-			m.loadSession()
-		}
-		return m, nil
-	case "down", "j":
-		if m.sessionCursor < len(m.sessions)-1 {
-			m.sessionCursor++
-			m.loadSession()
-		}
-		return m, nil
-	case "ctrl+n":
-		m.addSession()
-		return m, nil
-	case "ctrl+d":
-		if len(m.sessions) > 0 {
-			m.confirmDelete = true
-		}
-		return m, nil
-	case "enter":
-		if len(m.sessions) > 0 {
-			m.focusField(FocusName)
-		}
-		return m, nil
+	if delta, ok := listNavDelta(k); ok {
+		m.moveSessionCursor(delta)
+	} else {
+		m.handleListAction(k)
 	}
 	return m, nil
+}
+
+// listNavDelta maps list navigation keys to cursor deltas.
+func listNavDelta(k string) (int, bool) {
+	switch k {
+	case "up", "k":
+		return -1, true
+	case "down", "j":
+		return 1, true
+	}
+	return 0, false
+}
+
+// handleListAction handles non-navigation keys in list mode.
+func (m *Model) handleListAction(k string) {
+	switch k {
+	case "ctrl+n":
+		m.addSession()
+	case "ctrl+d":
+		m.maybeConfirmDelete()
+	case "enter":
+		m.maybeEditSession()
+	}
+}
+
+// moveSessionCursor moves the session cursor by delta and reloads the session.
+func (m *Model) moveSessionCursor(delta int) {
+	next := m.sessionCursor + delta
+	if next >= 0 && next < len(m.sessions) {
+		m.sessionCursor = next
+		m.loadSession()
+	}
+}
+
+// maybeConfirmDelete starts delete confirmation if sessions exist.
+func (m *Model) maybeConfirmDelete() {
+	if len(m.sessions) > 0 {
+		m.confirmDelete = true
+	}
+}
+
+// maybeEditSession focuses the name field if sessions exist.
+func (m *Model) maybeEditSession() {
+	if len(m.sessions) > 0 {
+		m.focusField(FocusName)
+	}
 }
 
 func (m Model) handleSessionFieldKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
@@ -276,15 +310,32 @@ func (m Model) focusAvailable(f Focus) bool {
 }
 
 func (m *Model) focusField(f Focus) {
+	m.blurAll()
+	m.focus = f
+	m.focusInput(f)
+}
+
+// blurAll removes focus from all text inputs.
+func (m *Model) blurAll() {
 	m.hostInput.Blur()
 	m.nameInput.Blur()
 	m.dirInput.Blur()
 	m.repoInput.Blur()
 	m.cmdInput.Blur()
-	m.focus = f
-	switch f {
-	case FocusHost:
+}
+
+// focusInput sets focus on the input matching the given focus target.
+func (m *Model) focusInput(f Focus) {
+	if f == FocusHost {
 		m.hostInput.Focus()
+		return
+	}
+	m.focusSessionInput(f)
+}
+
+// focusSessionInput sets focus on a session-related input field.
+func (m *Model) focusSessionInput(f Focus) {
+	switch f {
 	case FocusName:
 		m.nameInput.Focus()
 	case FocusDir:
@@ -305,31 +356,63 @@ func (m Model) trySave() (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Validate all sessions.
-	for _, s := range m.sessions {
-		if s.Name == "" {
-			continue // empty sessions are stripped
-		}
-		if !ssh.ValidSessionName(s.Name) {
-			m.saveErr = fmt.Sprintf("invalid session name %q — avoid control characters and colons", s.Name)
-			return m, nil
-		}
-		if s.Repo != "" {
-			if s.Dir == "" {
-				m.saveErr = fmt.Sprintf("session %q: repo requires a working directory", s.Name)
-				return m, nil
-			}
-			if !ssh.ValidRepoSlug(s.Repo) {
-				m.saveErr = fmt.Sprintf("invalid repo slug %q — use owner/repo format", s.Repo)
-				return m, nil
-			}
-		}
+	if err := validateSessions(m.sessions); err != "" {
+		m.saveErr = err
+		return m, nil
 	}
 
 	entry := m.buildEntry()
 	return m, func() tea.Msg {
-		return EditorSavedMsg{Entry: entry, EditIndex: m.editIndex}
+		return SavedMsg{Entry: entry, EditIndex: m.editIndex}
 	}
+}
+
+// validateSessions checks all sessions and returns an error message, or "" if valid.
+func validateSessions(sessions []config.DesiredSession) string {
+	for _, s := range sessions {
+		if err := validateSessionEntry(s); err != "" {
+			return err
+		}
+	}
+	return ""
+}
+
+// validateSessionEntry validates a single session entry, handling both named and unnamed cases.
+func validateSessionEntry(s config.DesiredSession) string {
+	if s.Name == "" {
+		return checkOrphanedFields(s)
+	}
+	return validateOneSession(s)
+}
+
+// checkOrphanedFields returns an error if a nameless session has dir or cmd populated.
+func checkOrphanedFields(s config.DesiredSession) string {
+	if s.Dir != "" || s.Cmd != "" {
+		return "session has working directory or command but no name — add a name or clear the fields"
+	}
+	return ""
+}
+
+// validateOneSession validates a single session's name and repo fields.
+func validateOneSession(s config.DesiredSession) string {
+	if !ssh.ValidSessionName(s.Name) {
+		return fmt.Sprintf("invalid session name %q — avoid control characters and colons", s.Name)
+	}
+	return validateSessionRepo(s)
+}
+
+// validateSessionRepo validates the repo-related fields of a session.
+func validateSessionRepo(s config.DesiredSession) string {
+	if s.Repo == "" {
+		return ""
+	}
+	if s.Dir == "" {
+		return fmt.Sprintf("session %q: repo requires a working directory", s.Name)
+	}
+	if !ssh.ValidRepoSlug(s.Repo) {
+		return fmt.Sprintf("invalid repo slug %q — use owner/repo format", s.Repo)
+	}
+	return ""
 }
 
 func (m Model) buildEntry() config.HostEntry {
@@ -416,36 +499,47 @@ func (m Model) renderSessionListSection() string {
 
 	for i, s := range m.sessions {
 		b.WriteString("\n")
-		name := s.Name
-		if name == "" {
-			name = "(unnamed)"
-		}
-
-		var styledName string
-		switch {
-		case i == m.sessionCursor && m.focus == FocusList:
-			styledName = sessionSelectedStyle.Render("  ▸ " + name)
-		case i == m.sessionCursor:
-			styledName = labelStyle.Render("  ▸ " + name)
-		default:
-			styledName = sessionNormalStyle.Render("    " + name)
-		}
-		b.WriteString(styledName)
-		if s.Dir != "" {
-			b.WriteString("  " + helperStyle.Render(s.Dir))
-		}
+		b.WriteString(m.renderSessionItem(i, s))
 	}
 
+	m.renderDeletePrompt(&b)
+
+	b.WriteString("\n")
+	b.WriteString(helperStyle.Render("    ctrl+n add │ ctrl+d delete"))
+
+	return b.String()
+}
+
+// renderSessionItem renders a single session list item with appropriate styling.
+func (m Model) renderSessionItem(i int, s config.DesiredSession) string {
+	name := s.Name
+	if name == "" {
+		name = "(unnamed)"
+	}
+	styled := m.styleSessionName(i, name)
+	if s.Dir != "" {
+		styled += "  " + helperStyle.Render(s.Dir)
+	}
+	return styled
+}
+
+// styleSessionName returns the styled session name based on cursor and focus.
+func (m Model) styleSessionName(i int, name string) string {
+	if i != m.sessionCursor {
+		return sessionNormalStyle.Render("    " + name)
+	}
+	if m.focus == FocusList {
+		return sessionSelectedStyle.Render("  ▸ " + name)
+	}
+	return labelStyle.Render("  ▸ " + name)
+}
+
+// renderDeletePrompt appends the delete confirmation prompt if active.
+func (m Model) renderDeletePrompt(b *strings.Builder) {
 	if m.confirmDelete && len(m.sessions) > 0 {
 		b.WriteString("\n")
 		b.WriteString(deletePromptStyle.Render("    Delete this session? y/n"))
 	}
-
-	b.WriteString("\n")
-	hint := "    ctrl+n add │ ctrl+d delete"
-	b.WriteString(helperStyle.Render(hint))
-
-	return b.String()
 }
 
 func (m Model) renderSessionFieldsSection() string {
@@ -510,24 +604,38 @@ func (m Model) renderEditorFooter() string {
 // --- Helpers ---
 
 func (m Model) updateFocusedInput(msg tea.Msg) (Model, tea.Cmd) {
+	cmd := m.delegateToInput(msg)
+	return m, cmd
+}
+
+// delegateToInput sends a message to the currently focused text input.
+func (m *Model) delegateToInput(msg tea.Msg) tea.Cmd {
+	if m.focus == FocusHost {
+		var cmd tea.Cmd
+		m.hostInput, cmd = m.hostInput.Update(msg)
+		return cmd
+	}
+	return m.delegateToSessionInput(msg)
+}
+
+// delegateToSessionInput sends a message to the currently focused session input.
+func (m *Model) delegateToSessionInput(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	switch m.focus {
-	case FocusHost:
-		m.hostInput, cmd = m.hostInput.Update(msg)
 	case FocusName:
 		m.nameInput, cmd = m.nameInput.Update(msg)
 	case FocusDir:
 		m.dirInput, cmd = m.dirInput.Update(msg)
 	case FocusRepo:
 		m.repoInput, cmd = m.repoInput.Update(msg)
-	case FocusCmd:
+	default:
 		m.cmdInput, cmd = m.cmdInput.Update(msg)
 	}
-	return m, cmd
+	return cmd
 }
 
 func sendCanceled() tea.Cmd {
-	return func() tea.Msg { return EditorCanceledMsg{} }
+	return func() tea.Msg { return CanceledMsg{} }
 }
 
 // --- Input constructors ---

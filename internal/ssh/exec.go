@@ -62,7 +62,7 @@ func ExecReplace(target, term, sessionName string) error {
 	}
 
 	argv := BuildAttachArgs(target, term, sessionName)
-	logging.Log().Info("exec replace", "argv", argv)
+	logging.Log().Info("exec replace", "target", target, "session", sessionName)
 
 	// syscall.Exec replaces the process — clean TTY handoff, no orphan.
 	return syscall.Exec(sshPath, argv, os.Environ())
@@ -132,7 +132,7 @@ func CreateSession(target, term, name, dir, cmd string) error {
 		return fmt.Errorf("ssh not found in PATH: %w", err)
 	}
 
-	logging.Log().Info("create session", "argv", argv)
+	logging.Log().Info("create session", "target", target, "session", name)
 
 	c := exec.Command(sshPath, argv[1:]...)
 	c.Stdin = os.Stdin
@@ -193,20 +193,39 @@ func BuildEnsureRepoArgs(target, dir, repo string) []string {
 // Runs as a single SSH connection: mkdir, check git remote, clone if missing.
 // Returns an error if a different repo is already there.
 func EnsureRepo(target, dir, repo string) error {
+	if err := validateEnsureRepoArgs(dir, repo); err != nil {
+		return err
+	}
+
+	stdout, stderr, err := runEnsureRepo(target, dir, repo)
+	if err == nil {
+		logging.Log().Info("ensure repo: ok", "repo", repo)
+		return nil
+	}
+
+	return handleEnsureRepoError(err, dir, repo, stdout, stderr)
+}
+
+// validateEnsureRepoArgs validates the inputs to EnsureRepo.
+func validateEnsureRepoArgs(dir, repo string) error {
 	if dir == "" {
 		return fmt.Errorf("ensure repo: dir must not be empty (repo %s requires a directory)", repo)
 	}
 	if !ValidRepoSlug(repo) {
 		return fmt.Errorf("ensure repo: invalid repo slug %q", repo)
 	}
+	return nil
+}
 
+// runEnsureRepo executes the ensure-repo SSH command and returns stdout, stderr, and error.
+func runEnsureRepo(target, dir, repo string) (string, string, error) {
 	sshPath, err := exec.LookPath("ssh")
 	if err != nil {
-		return fmt.Errorf("ssh not found in PATH: %w", err)
+		return "", "", fmt.Errorf("ssh not found in PATH: %w", err)
 	}
 
 	argv := BuildEnsureRepoArgs(target, dir, repo)
-	logging.Log().Info("ensure repo", "argv", argv)
+	logging.Log().Info("ensure repo", "target", target, "dir", dir, "repo", repo)
 
 	cmd := exec.Command(sshPath, argv[1:]...)
 	var stdoutBuf, stderrBuf bytes.Buffer
@@ -215,37 +234,41 @@ func EnsureRepo(target, dir, repo string) error {
 	cmd.Stdin = os.Stdin
 
 	err = cmd.Run()
-	stdout := strings.TrimSpace(stdoutBuf.String())
-	stderr := strings.TrimSpace(stderrBuf.String())
+	return strings.TrimSpace(stdoutBuf.String()), strings.TrimSpace(stderrBuf.String()), err
+}
 
-	if err == nil {
-		// Exit 0: repo was already present and matched, or clone succeeded.
-		logging.Log().Info("ensure repo: ok", "repo", repo)
-		return nil
-	}
-
+// handleEnsureRepoError interprets a non-nil error from the ensure-repo script.
+func handleEnsureRepoError(err error, dir, repo, stdout, stderr string) error {
 	exitErr, ok := err.(*exec.ExitError)
 	if !ok {
 		return fmt.Errorf("ensure repo: %w", err)
 	}
+	return handleEnsureRepoExit(exitErr.ExitCode(), dir, repo, stdout, stderr)
+}
 
-	switch exitErr.ExitCode() {
+// handleEnsureRepoExit maps exit codes to specific error messages.
+func handleEnsureRepoExit(code int, dir, repo, stdout, stderr string) error {
+	switch code {
 	case 2:
-		// Repo exists but may be different — compare.
-		existing := NormalizeRemoteURL(stdout)
-		if existing == repo {
-			logging.Log().Info("ensure repo: match", "repo", repo)
-			return nil
-		}
-		if !ValidRepoSlug(existing) {
-			return fmt.Errorf("directory %s has unrecognized remote URL %q; expected %q", dir, stdout, repo)
-		}
-		return fmt.Errorf("directory %s contains repo %q, expected %q", dir, existing, repo)
+		return checkRepoMatch(dir, repo, stdout)
 	case 3:
 		return fmt.Errorf("gh repo clone %s failed: %s", repo, stderr)
 	default:
-		return fmt.Errorf("ensure repo: %s: %w", stderr, err)
+		return fmt.Errorf("ensure repo: %s: exit code %d", stderr, code)
 	}
+}
+
+// checkRepoMatch compares the existing remote URL with the expected repo.
+func checkRepoMatch(dir, repo, stdout string) error {
+	existing := NormalizeRemoteURL(stdout)
+	if existing == repo {
+		logging.Log().Info("ensure repo: match", "repo", repo)
+		return nil
+	}
+	if !ValidRepoSlug(existing) {
+		return fmt.Errorf("directory %s has unrecognized remote URL %q; expected %q", dir, stdout, repo)
+	}
+	return fmt.Errorf("directory %s contains repo %q, expected %q", dir, existing, repo)
 }
 
 // BuildGhostWarpScript builds a shell script that ensures repo, creates
@@ -302,7 +325,7 @@ func GhostWarpChild(target, term, name, dir, repo, cmd string) error {
 		return fmt.Errorf("ssh not found in PATH: %w", err)
 	}
 
-	logging.Log().Info("ghost warp child", "argv", argv)
+	logging.Log().Info("ghost warp child", "target", target, "session", name)
 
 	c := exec.Command(sshPath, argv[1:]...)
 	c.Stdin = os.Stdin
@@ -326,7 +349,7 @@ func GhostWarpReplace(target, term, name, dir, repo, cmd string) error {
 		return fmt.Errorf("ssh not found in PATH: %w", err)
 	}
 
-	logging.Log().Info("ghost warp replace", "argv", argv)
+	logging.Log().Info("ghost warp replace", "target", target, "session", name)
 
 	return syscall.Exec(sshPath, argv, os.Environ())
 }
@@ -341,7 +364,7 @@ func ExecChild(target, term, sessionName string) error {
 	}
 
 	argv := BuildAttachArgs(target, term, sessionName)
-	logging.Log().Info("exec child", "argv", argv)
+	logging.Log().Info("exec child", "target", target, "session", sessionName)
 
 	cmd := exec.Command(sshPath, argv[1:]...)
 	cmd.Stdin = os.Stdin

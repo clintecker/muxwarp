@@ -162,17 +162,31 @@ func validateDesiredSessions(cfg *Config) error {
 
 func validateHostSessions(h HostEntry) error {
 	for _, ds := range h.Sessions {
-		if !ssh.ValidSessionName(ds.Name) {
-			return fmt.Errorf("invalid session name %q for host %q", ds.Name, h.Target)
+		if err := validateOneHostSession(ds, h.Target); err != nil {
+			return err
 		}
-		if ds.Repo != "" {
-			if ds.Dir == "" {
-				return fmt.Errorf("session %q for host %q: repo requires dir", ds.Name, h.Target)
-			}
-			if !ssh.ValidRepoSlug(ds.Repo) {
-				return fmt.Errorf("session %q for host %q: invalid repo slug %q", ds.Name, h.Target, ds.Repo)
-			}
-		}
+	}
+	return nil
+}
+
+// validateOneHostSession validates a single session's name and repo fields.
+func validateOneHostSession(ds DesiredSession, target string) error {
+	if !ssh.ValidSessionName(ds.Name) {
+		return fmt.Errorf("invalid session name %q for host %q", ds.Name, target)
+	}
+	return validateHostSessionRepo(ds, target)
+}
+
+// validateHostSessionRepo validates repo-related fields for a session.
+func validateHostSessionRepo(ds DesiredSession, target string) error {
+	if ds.Repo == "" {
+		return nil
+	}
+	if ds.Dir == "" {
+		return fmt.Errorf("session %q for host %q: repo requires dir", ds.Name, target)
+	}
+	if !ssh.ValidRepoSlug(ds.Repo) {
+		return fmt.Errorf("session %q for host %q: invalid repo slug %q", ds.Name, target, ds.Repo)
 	}
 	return nil
 }
