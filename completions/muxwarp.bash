@@ -22,7 +22,7 @@ _muxwarp() {
     esac
 
     if [[ "${cur}" == -* ]]; then
-        opts="--help --version --log --completions"
+        opts="-h --help --version --log --completions"
         COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
         return 0
     fi

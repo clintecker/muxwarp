@@ -396,33 +396,55 @@ func (m Model) handleEditorSaved(msg editor.SavedMsg) (tea.Model, tea.Cmd) {
 
 	logging.Log().Info("editor saved", "target", msg.Entry.Target, "sessions", len(msg.Entry.Sessions))
 
-	m.applyEditorEntry(msg)
+	clone := cloneConfig(m.config)
+	applyEditorEntry(clone, msg)
 
-	if err := config.Save(m.config, m.configPath); err != nil {
+	if err := config.Save(clone, m.configPath); err != nil {
 		m.mode = ModeList
 		return m, nil
 	}
 
+	m.config = clone
 	m.configChanged = true
 	return m, tea.Quit
 }
 
-// applyEditorEntry updates or adds the entry from the editor into the config.
-func (m *Model) applyEditorEntry(msg editor.SavedMsg) {
-	if msg.EditIndex >= 0 && msg.EditIndex < len(m.config.Hosts) {
-		m.config.Hosts[msg.EditIndex] = msg.Entry
-		return
+// cloneConfig returns a deep copy of the given Config.
+func cloneConfig(src *config.Config) *config.Config {
+	dst := &config.Config{Defaults: src.Defaults}
+	dst.Hosts = make([]config.HostEntry, len(src.Hosts))
+	for i, h := range src.Hosts {
+		dst.Hosts[i] = cloneHostEntry(h)
 	}
-	m.mergeOrAppendEntry(msg.Entry)
+	return dst
 }
 
-// mergeOrAppendEntry merges sessions into an existing host or appends a new one.
-func (m *Model) mergeOrAppendEntry(entry config.HostEntry) {
-	if idx := findHostByTarget(m.config.Hosts, entry.Target); idx >= 0 {
-		m.config.Hosts[idx].Sessions = mergeSessions(m.config.Hosts[idx].Sessions, entry.Sessions)
-	} else {
-		m.config.Hosts = append(m.config.Hosts, entry)
+// cloneHostEntry returns a deep copy of a HostEntry.
+func cloneHostEntry(h config.HostEntry) config.HostEntry {
+	clone := config.HostEntry{Target: h.Target}
+	clone.Tags = append([]string(nil), h.Tags...)
+	clone.Sessions = append([]config.DesiredSession(nil), h.Sessions...)
+	return clone
+}
+
+// applyEditorEntry updates or adds the entry from the editor into the config.
+func applyEditorEntry(cfg *config.Config, msg editor.SavedMsg) {
+	if msg.EditIndex >= 0 && msg.EditIndex < len(cfg.Hosts) {
+		cfg.Hosts[msg.EditIndex] = msg.Entry
+		return
 	}
+	mergeOrAppendToConfig(cfg, msg.Entry)
+}
+
+// mergeOrAppendToConfig merges sessions into an existing host or appends a new one.
+func mergeOrAppendToConfig(cfg *config.Config, entry config.HostEntry) {
+	idx := findHostByTarget(cfg.Hosts, entry.Target)
+	if idx < 0 {
+		cfg.Hosts = append(cfg.Hosts, entry)
+		return
+	}
+	entry.Sessions = mergeSessions(cfg.Hosts[idx].Sessions, entry.Sessions)
+	cfg.Hosts[idx] = entry
 }
 
 // findHostByTarget returns the index of the host with the given target, or -1.
@@ -445,6 +467,7 @@ func mergeSessions(existing, incoming []config.DesiredSession) []config.DesiredS
 	copy(result, existing)
 	for _, s := range incoming {
 		if s.Name != "" && !names[s.Name] {
+			names[s.Name] = true
 			result = append(result, s)
 		}
 	}

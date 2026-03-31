@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -516,7 +517,7 @@ func TestEditorSaved_MergesDuplicateHost(t *testing.T) {
 			{Target: "alpha", Sessions: []config.DesiredSession{{Name: "existing"}}},
 		},
 	}
-	m.configPath = "/dev/null" // avoid actual file write
+	m.configPath = filepath.Join(t.TempDir(), "test-config.yaml")
 
 	// Simulate adding a host with the same target.
 	msg := editor.SavedMsg{

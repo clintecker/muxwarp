@@ -49,6 +49,7 @@ type Model struct {
 	sessionCursor int
 	editing       bool // true = edit existing, false = add new
 	editIndex     int  // index in Config.Hosts (-1 for new)
+	originalTags  []string
 	width, height int
 	sshHosts      []sshconfig.Host
 	confirmDelete bool
@@ -82,6 +83,7 @@ func NewForEdit(entry config.HostEntry, index int, selectedSession string, sshHo
 	m.sessions = make([]config.DesiredSession, len(entry.Sessions))
 	copy(m.sessions, entry.Sessions)
 
+	m.originalTags = entry.Tags
 	m.preselectSession(selectedSession)
 
 	if len(m.sessions) > 0 {
@@ -418,6 +420,7 @@ func validateSessionRepo(s config.DesiredSession) string {
 func (m Model) buildEntry() config.HostEntry {
 	entry := config.HostEntry{
 		Target: strings.TrimSpace(m.hostInput.Value()),
+		Tags:   m.originalTags,
 	}
 	for _, s := range m.sessions {
 		if s.Name != "" {
