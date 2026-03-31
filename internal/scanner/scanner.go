@@ -20,11 +20,13 @@ import (
 
 // Session represents a single tmux session discovered on a remote host.
 type Session struct {
-	Host      string // full SSH target (e.g. "clint@indigo")
-	HostShort string // display name (e.g. "indigo")
-	Name      string // tmux session name (validated)
-	Attached  int    // number of attached clients
-	Windows   int    // number of windows
+	Host         string // full SSH target (e.g. "clint@indigo")
+	HostShort    string // display name (e.g. "indigo")
+	Name         string // tmux session name (validated)
+	Attached     int    // number of attached clients
+	Windows      int    // number of windows
+	Created      int64  // unix timestamp of session creation (0 if unknown)
+	LastActivity int64  // unix timestamp of last activity (0 if unknown)
 }
 
 // Key returns a unique identifier for the session: "host/name".
@@ -72,38 +74,60 @@ func parseSessions(out []byte, target string) []Session {
 	return sessions
 }
 
-// splitSessionFields splits a tab-separated line into (name, attached, windows).
-// Returns false if the line is empty, has the wrong number of fields, or
-// contains an invalid session name.
-func splitSessionFields(line string) (name string, attached, windows int, ok bool) {
-	parts := strings.SplitN(line, "\t", 3)
-	if len(parts) != 3 || !ssh.ValidSessionName(parts[0]) {
-		return "", 0, 0, false
+// splitSessionFields splits a tab-separated line into session fields.
+// Accepts 3-field (name, attached, windows) or 5-field output with timestamps.
+// Returns false if the line has fewer than 3 fields or an invalid session name.
+func splitSessionFields(line string) (name string, attached, windows int, created, lastActivity int64, ok bool) {
+	parts := strings.Split(line, "\t")
+	if len(parts) < 3 || !ssh.ValidSessionName(parts[0]) {
+		return "", 0, 0, 0, 0, false
 	}
-	a, err := strconv.Atoi(parts[1])
+	a, w, parseOK := parseCoreFields(parts[1], parts[2])
+	if !parseOK {
+		return "", 0, 0, 0, 0, false
+	}
+	c, la := parseTimestamps(parts)
+	return parts[0], a, w, c, la, true
+}
+
+// parseCoreFields parses the attached and windows fields from strings.
+func parseCoreFields(attachedStr, windowsStr string) (attached, windows int, ok bool) {
+	a, err := strconv.Atoi(attachedStr)
 	if err != nil {
-		return "", 0, 0, false
+		return 0, 0, false
 	}
-	w, err := strconv.Atoi(parts[2])
+	w, err := strconv.Atoi(windowsStr)
 	if err != nil {
-		return "", 0, 0, false
+		return 0, 0, false
 	}
-	return parts[0], a, w, true
+	return a, w, true
+}
+
+// parseTimestamps extracts optional created/lastActivity timestamps from parts[3:4].
+func parseTimestamps(parts []string) (created, lastActivity int64) {
+	if len(parts) < 5 {
+		return 0, 0
+	}
+	c, _ := strconv.ParseInt(parts[3], 10, 64)
+	la, _ := strconv.ParseInt(parts[4], 10, 64)
+	return c, la
 }
 
 // parseSessionLine parses a single tab-separated line into a Session.
 // Returns false if the line is empty, malformed, or has an invalid name.
 func parseSessionLine(line, target, hostShort string) (Session, bool) {
-	name, attached, windows, ok := splitSessionFields(line)
+	name, attached, windows, created, lastActivity, ok := splitSessionFields(line)
 	if !ok {
 		return Session{}, false
 	}
 	return Session{
-		Host:      target,
-		HostShort: hostShort,
-		Name:      name,
-		Attached:  attached,
-		Windows:   windows,
+		Host:         target,
+		HostShort:    hostShort,
+		Name:         name,
+		Attached:     attached,
+		Windows:      windows,
+		Created:      created,
+		LastActivity: lastActivity,
 	}, true
 }
 

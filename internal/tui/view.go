@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -46,9 +47,45 @@ func (m Model) renderListScreen() string {
 	}
 
 	b.WriteRune('\n')
-	b.WriteString(m.renderFooter())
+	if m.mode == ModeTagPicker {
+		b.WriteString(m.renderTagPicker())
+	} else {
+		b.WriteString(m.renderFooter())
+	}
 
 	return b.String()
+}
+
+// renderTagPicker renders an inline tag selection picker in the footer area.
+func (m Model) renderTagPicker() string {
+	tags := m.allTags()
+	var b strings.Builder
+	b.WriteString(filterPromptStyle.Render("Select tag:"))
+	b.WriteRune('\n')
+	b.WriteString(renderTagList(tags, m.tagCursor))
+	b.WriteRune('\n')
+	b.WriteString(footerStyle.Render("h/l navigate │ enter select │ esc cancel"))
+	return b.String()
+}
+
+// renderTagList renders the horizontal list of tags with cursor highlighting.
+func renderTagList(tags []string, cursor int) string {
+	var b strings.Builder
+	for i, tag := range tags {
+		b.WriteString(renderTagItem(tag, i == cursor))
+		if i < len(tags)-1 {
+			b.WriteString("  ")
+		}
+	}
+	return b.String()
+}
+
+// renderTagItem renders a single tag as either selected or unselected.
+func renderTagItem(tag string, selected bool) string {
+	if selected {
+		return selectorStyle.Render("▸ ") + sessionNameStyle.Render(tag)
+	}
+	return "  " + metadataStyle.Render(tag)
 }
 
 // renderEditorScreen renders the config editor screen.
@@ -139,28 +176,72 @@ func (m Model) countHosts() int {
 
 // columnWidths holds computed column widths for aligned row rendering.
 type columnWidths struct {
-	maxName int // max session name length across visible sessions
-	maxDots int // max window count across visible sessions (0 if width < 60)
+	maxName     int
+	maxDots     int
+	maxAttached int // display width of widest attached indicator (0 if none)
+	maxAge      int
+	maxActivity int
 }
 
 // computeColumnWidths computes the max name length and max dot count
 // across all filtered sessions for column alignment.
-func (m Model) computeColumnWidths() columnWidths {
+func (m Model) computeColumnWidths(now time.Time) columnWidths {
 	var cols columnWidths
-	showDots := m.width >= 60
 	for _, s := range m.filtered {
 		cols.maxName = max(cols.maxName, len(s.Name))
-		if showDots {
-			cols.maxDots = max(cols.maxDots, s.Windows)
-		}
+		updateAttachedWidth(&cols, s, m.width)
+		updateDotWidth(&cols, s, m.width)
+		updateAgeWidths(&cols, s, m.width, now)
 	}
 	return cols
+}
+
+// updateAttachedWidth updates the maxAttached column width for a session.
+func updateAttachedWidth(cols *columnWidths, s Session, width int) {
+	if width >= 65 && s.Attached > 1 && !s.IsGhost() {
+		w := lipgloss.Width(fmt.Sprintf("%d↗", s.Attached))
+		cols.maxAttached = max(cols.maxAttached, w)
+	}
+}
+
+// updateDotWidth updates the maxDots column width for a session.
+func updateDotWidth(cols *columnWidths, s Session, width int) {
+	if width >= 60 {
+		cols.maxDots = max(cols.maxDots, s.Windows)
+	}
+}
+
+// updateAgeWidths updates the maxAge and maxActivity column widths for a session.
+func updateAgeWidths(cols *columnWidths, s Session, width int, now time.Time) {
+	if s.IsGhost() {
+		return
+	}
+	if width >= 70 {
+		cols.maxAge = max(cols.maxAge, len(formatAgeSince(s.Created, now)))
+	}
+	if width >= 80 {
+		cols.maxActivity = max(cols.maxActivity, activityWidth(s, now))
+	}
+}
+
+// activityWidth returns the display width of the last-activity field for a session.
+func activityWidth(s Session, now time.Time) int {
+	a := formatAgeSince(s.LastActivity, now)
+	switch a {
+	case "":
+		return 0
+	case "now":
+		return 3
+	default:
+		return len(a + " ago")
+	}
 }
 
 // renderList builds the scrolling session list.
 func (m Model) renderList() string {
 	visible := m.visibleRows()
-	cols := m.computeColumnWidths()
+	now := time.Now()
+	cols := m.computeColumnWidths(now)
 	var b strings.Builder
 
 	end := min(m.viewOffset+visible, len(m.filtered))
@@ -169,7 +250,7 @@ func (m Model) renderList() string {
 		if i > m.viewOffset {
 			b.WriteRune('\n')
 		}
-		b.WriteString(m.renderRow(i, cols))
+		b.WriteString(m.renderRow(i, cols, now))
 	}
 
 	// Pad remaining rows if the list is shorter than the viewport.
@@ -182,40 +263,97 @@ func (m Model) renderList() string {
 	return b.String()
 }
 
+// renderAttached returns the attached-count indicator (e.g. "2↗") when multiple
+// clients are attached and the terminal is wide enough.
+func renderAttached(s Session, termWidth int) string {
+	if termWidth < 65 || s.Attached <= 1 || s.IsGhost() {
+		return ""
+	}
+	return attachedStyle.Render(fmt.Sprintf("%d↗", s.Attached))
+}
+
+// renderAge returns the session creation age string when the terminal is wide enough.
+func renderAge(s Session, termWidth int, now time.Time) string {
+	if termWidth < 70 || s.IsGhost() {
+		return ""
+	}
+	return metadataStyle.Render(formatAgeSince(s.Created, now))
+}
+
+// renderLastActive returns the last-activity age string when the terminal is wide enough.
+func renderLastActive(s Session, termWidth int, now time.Time) string {
+	if termWidth < 80 || s.IsGhost() {
+		return ""
+	}
+	age := formatAgeSince(s.LastActivity, now)
+	if age == "" {
+		return ""
+	}
+	if age == "now" {
+		return metadataStyle.Render("now")
+	}
+	return metadataStyle.Render(age + " ago")
+}
+
 // renderRow renders a single session row with column-aligned layout.
 //
 // Columns are padded so names, badges, dots, and hosts align vertically:
-//   ▸  name(padded)  ◇ IDLE  ▪▪(padded)   host
-func (m Model) renderRow(idx int, cols columnWidths) string {
+//
+//	▸  name(padded)  ◇ IDLE  ▪▪(padded)   host
+func (m Model) renderRow(idx int, cols columnWidths, now time.Time) string {
 	s := m.filtered[idx]
 	selected := idx == m.cursor
-
-	sel := renderSelector(selected)
-	name := m.renderSessionName(s)
-	badge := renderBadge(s, m.width)
-	dots := renderWindows(s, m.width)
+	name, dots := m.paddedNameAndDots(s, cols)
+	left := buildRowLeft(s, name, dots, cols, m.width, now, renderSelector(selected))
 	host := m.renderHostTag(s, m.width) + m.renderLatencyTag(s)
+	return applyRowSelection(left, host, selected, m.width)
+}
 
-	// Pad session name to align badge column.
-	namePad := cols.maxName - len(s.Name)
-	if namePad > 0 {
-		name += strings.Repeat(" ", namePad)
+// paddedNameAndDots returns the name and dots strings with column padding applied.
+func (m Model) paddedNameAndDots(s Session, cols columnWidths) (name, dots string) {
+	name = m.renderSessionName(s)
+	if pad := cols.maxName - len(s.Name); pad > 0 {
+		name += strings.Repeat(" ", pad)
 	}
-
-	// Pad dots to align host column.
+	dots = renderWindows(s, m.width)
 	dotCount := 0
 	if m.width >= 60 {
 		dotCount = s.Windows
 	}
-	dotPad := cols.maxDots - dotCount
-	if dotPad > 0 {
-		dots += strings.Repeat(" ", dotPad)
+	if pad := cols.maxDots - dotCount; pad > 0 {
+		dots += strings.Repeat(" ", pad)
 	}
+	return name, dots
+}
 
-	// Build left content: selector + name + badge + dots
-	left := composLeftContent(sel, name, badge, dots)
+// buildRowLeft assembles the left portion of a row: selector + name + badge + optional fields.
+func buildRowLeft(s Session, name, dots string, cols columnWidths, width int, now time.Time, sel string) string {
+	badge := renderBadge(s, width)
+	left := sel + " " + name + "  " + badge
+	left = appendPadded(left, " ", renderAttached(s, width), cols.maxAttached)
+	left = appendIfNonEmpty(left, "  ", dots)
+	left = appendIfNonEmpty(left, "  ", renderAge(s, width, now))
+	left = appendIfNonEmpty(left, "  ", renderLastActive(s, width, now))
+	return left
+}
 
-	return applyRowSelection(left, host, selected, m.width)
+// appendPadded appends sep+val to base, padding val to targetWidth.
+// If targetWidth is 0, nothing is appended. If val is empty, padding is still applied.
+func appendPadded(base, sep, val string, targetWidth int) string {
+	if targetWidth == 0 {
+		return base
+	}
+	valWidth := lipgloss.Width(val)
+	padded := val + strings.Repeat(" ", max(targetWidth-valWidth, 0))
+	return base + sep + padded
+}
+
+// appendIfNonEmpty appends sep+val to base only when val is non-empty.
+func appendIfNonEmpty(base, sep, val string) string {
+	if val == "" {
+		return base
+	}
+	return base + sep + val
 }
 
 // renderSelector returns the cursor indicator for a row.
@@ -267,14 +405,6 @@ func renderWindows(s Session, termWidth int) string {
 		return ""
 	}
 	return windowDotStyle.Render(strings.Repeat("▪", s.Windows))
-}
-
-// composLeftContent joins selector, name, badge, and dots.
-func composLeftContent(sel, name, badge, dots string) string {
-	if dots != "" {
-		return fmt.Sprintf("%s %s  %s  %s", sel, name, badge, dots)
-	}
-	return fmt.Sprintf("%s %s  %s", sel, name, badge)
 }
 
 // renderHostTag renders the host as a dim right-aligned tag.
@@ -394,7 +524,13 @@ func (m Model) renderFooter() string {
 		return prompt + hint
 	}
 
-	return footerStyle.Render("enter warp │ / filter │ a add │ e edit │ d delete │ q quit")
+	if m.tagFilter != "" {
+		tagLabel := filterPromptStyle.Render("tag: " + m.tagFilter)
+		countLabel := statusStyle.Render(fmt.Sprintf("%d sessions", len(m.filtered)))
+		return tagLabel + "  " + countLabel + "\n" +
+			footerStyle.Render("t clear │ / filter │ enter warp │ q quit")
+	}
+	return footerStyle.Render("enter warp │ / filter │ t tags │ a add │ e edit │ d delete │ q quit")
 }
 
 // renderEmpty renders the empty state when no sessions are found.

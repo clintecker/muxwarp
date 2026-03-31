@@ -23,6 +23,7 @@ type DesiredSession struct {
 // a plain string (backward compat) or as an object with optional desired sessions.
 type HostEntry struct {
 	Target   string           `yaml:"target"`
+	Tags     []string         `yaml:"tags,omitempty"`
 	Sessions []DesiredSession `yaml:"sessions,omitempty"`
 }
 
@@ -161,17 +162,31 @@ func validateDesiredSessions(cfg *Config) error {
 
 func validateHostSessions(h HostEntry) error {
 	for _, ds := range h.Sessions {
-		if !ssh.ValidSessionName(ds.Name) {
-			return fmt.Errorf("invalid session name %q for host %q", ds.Name, h.Target)
+		if err := validateOneHostSession(ds, h.Target); err != nil {
+			return err
 		}
-		if ds.Repo != "" {
-			if ds.Dir == "" {
-				return fmt.Errorf("session %q for host %q: repo requires dir", ds.Name, h.Target)
-			}
-			if !ssh.ValidRepoSlug(ds.Repo) {
-				return fmt.Errorf("session %q for host %q: invalid repo slug %q", ds.Name, h.Target, ds.Repo)
-			}
-		}
+	}
+	return nil
+}
+
+// validateOneHostSession validates a single session's name and repo fields.
+func validateOneHostSession(ds DesiredSession, target string) error {
+	if !ssh.ValidSessionName(ds.Name) {
+		return fmt.Errorf("invalid session name %q for host %q", ds.Name, target)
+	}
+	return validateHostSessionRepo(ds, target)
+}
+
+// validateHostSessionRepo validates repo-related fields for a session.
+func validateHostSessionRepo(ds DesiredSession, target string) error {
+	if ds.Repo == "" {
+		return nil
+	}
+	if ds.Dir == "" {
+		return fmt.Errorf("session %q for host %q: repo requires dir", ds.Name, target)
+	}
+	if !ssh.ValidRepoSlug(ds.Repo) {
+		return fmt.Errorf("session %q for host %q: invalid repo slug %q", ds.Name, target, ds.Repo)
 	}
 	return nil
 }
@@ -217,7 +232,7 @@ func (c Config) MarshalYAML() (interface{}, error) {
 
 // marshalHostEntry marshals a single HostEntry as either a scalar or mapping node.
 func marshalHostEntry(h HostEntry) (yaml.Node, error) {
-	if len(h.Sessions) == 0 {
+	if len(h.Sessions) == 0 && len(h.Tags) == 0 {
 		return marshalScalarHost(h.Target), nil
 	}
 	return marshalMappingHost(h)
@@ -232,7 +247,7 @@ func marshalScalarHost(target string) yaml.Node {
 	}
 }
 
-// marshalMappingHost encodes a HostEntry with sessions as a yaml.MappingNode.
+// marshalMappingHost encodes a HostEntry with tags and/or sessions as a yaml.MappingNode.
 func marshalMappingHost(h HostEntry) (yaml.Node, error) {
 	mapping := yaml.Node{
 		Kind: yaml.MappingNode,
@@ -245,51 +260,82 @@ func marshalMappingHost(h HostEntry) (yaml.Node, error) {
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: h.Target},
 	)
 
-	// Add "sessions" key and sequence value.
+	// Add "tags" as a flow-style sequence if present.
+	if len(h.Tags) > 0 {
+		tagsSeq := yaml.Node{
+			Kind:  yaml.SequenceNode,
+			Tag:   "!!seq",
+			Style: yaml.FlowStyle,
+		}
+		for _, tag := range h.Tags {
+			tagsSeq.Content = append(tagsSeq.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: tag},
+			)
+		}
+		mapping.Content = append(mapping.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "tags"},
+			&tagsSeq,
+		)
+	}
+
+	// Add "sessions" key and sequence value, if sessions are present.
+	if len(h.Sessions) > 0 {
+		sessionsSeq := marshalSessions(h.Sessions)
+		mapping.Content = append(mapping.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "sessions"},
+			&sessionsSeq,
+		)
+	}
+
+	return mapping, nil
+}
+
+// marshalSessions encodes a slice of DesiredSession as a yaml.SequenceNode.
+func marshalSessions(sessions []DesiredSession) yaml.Node {
 	sessionsSeq := yaml.Node{
 		Kind: yaml.SequenceNode,
 		Tag:  "!!seq",
 	}
-	for _, ds := range h.Sessions {
-		sessionMap := yaml.Node{
-			Kind: yaml.MappingNode,
-			Tag:  "!!map",
-		}
-		// name (always present)
-		sessionMap.Content = append(sessionMap.Content,
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "name"},
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Name},
-		)
-		// dir (optional)
-		if ds.Dir != "" {
-			sessionMap.Content = append(sessionMap.Content,
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "dir"},
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Dir},
-			)
-		}
-		// repo (optional)
-		if ds.Repo != "" {
-			sessionMap.Content = append(sessionMap.Content,
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "repo"},
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Repo},
-			)
-		}
-		// cmd (optional)
-		if ds.Cmd != "" {
-			sessionMap.Content = append(sessionMap.Content,
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "cmd"},
-				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Cmd},
-			)
-		}
+	for _, ds := range sessions {
+		sessionMap := marshalSession(ds)
 		sessionsSeq.Content = append(sessionsSeq.Content, &sessionMap)
 	}
+	return sessionsSeq
+}
 
-	mapping.Content = append(mapping.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "sessions"},
-		&sessionsSeq,
+// marshalSession encodes a single DesiredSession as a yaml.MappingNode.
+func marshalSession(ds DesiredSession) yaml.Node {
+	sessionMap := yaml.Node{
+		Kind: yaml.MappingNode,
+		Tag:  "!!map",
+	}
+	// name (always present)
+	sessionMap.Content = append(sessionMap.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "name"},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Name},
 	)
-
-	return mapping, nil
+	// dir (optional)
+	if ds.Dir != "" {
+		sessionMap.Content = append(sessionMap.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "dir"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Dir},
+		)
+	}
+	// repo (optional)
+	if ds.Repo != "" {
+		sessionMap.Content = append(sessionMap.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "repo"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Repo},
+		)
+	}
+	// cmd (optional)
+	if ds.Cmd != "" {
+		sessionMap.Content = append(sessionMap.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "cmd"},
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ds.Cmd},
+		)
+	}
+	return sessionMap
 }
 
 // Save marshals the config to YAML and writes it atomically to the given path.
@@ -311,39 +357,44 @@ func Save(cfg *Config, path string) error {
 func writeAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
 
+	tmpName, err := writeTempFile(dir, data)
+	if err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmpName, path); err != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("renaming temp file: %w", err)
+	}
+	return nil
+}
+
+// writeTempFile creates a temp file in dir, sets 0600 permissions, writes data,
+// and returns the temp file name. The caller is responsible for removing it on error.
+func writeTempFile(dir string, data []byte) (string, error) {
 	tmp, err := os.CreateTemp(dir, ".muxwarp-config-*.yaml")
 	if err != nil {
-		return fmt.Errorf("creating temp file: %w", err)
+		return "", fmt.Errorf("creating temp file: %w", err)
 	}
 	tmpName := tmp.Name()
 
-	// Clean up the temp file on any error path.
-	defer func() {
-		if tmpName != "" {
-			os.Remove(tmpName)
-		}
-	}()
-
 	if err := os.Chmod(tmpName, 0o600); err != nil {
 		tmp.Close()
-		return fmt.Errorf("setting file permissions: %w", err)
+		os.Remove(tmpName)
+		return "", fmt.Errorf("setting file permissions: %w", err)
 	}
 
 	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
-		return fmt.Errorf("writing temp file: %w", err)
+		os.Remove(tmpName)
+		return "", fmt.Errorf("writing temp file: %w", err)
 	}
+
 	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("closing temp file: %w", err)
+		os.Remove(tmpName)
+		return "", fmt.Errorf("closing temp file: %w", err)
 	}
-
-	if err := os.Rename(tmpName, path); err != nil {
-		return fmt.Errorf("renaming temp file: %w", err)
-	}
-
-	// Rename succeeded; clear tmpName so defer doesn't remove the final file.
-	tmpName = ""
-	return nil
+	return tmpName, nil
 }
 
 // ExampleConfig returns an example YAML configuration string for friendly error messages.

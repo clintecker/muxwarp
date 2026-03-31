@@ -16,10 +16,11 @@ import (
 type Mode int
 
 const (
-	ModeList   Mode = iota // default session list
-	ModeFilter             // filter input active
-	ModeEdit               // config editor
-	ModeWizard             // first-run wizard
+	ModeList      Mode = iota // default session list
+	ModeFilter                // filter input active
+	ModeTagPicker             // tag picker overlay
+	ModeEdit                  // config editor
+	ModeWizard                // first-run wizard
 )
 
 // DesiredInfo holds creation metadata for a ghost session (desired but not yet existing).
@@ -31,12 +32,15 @@ type DesiredInfo struct {
 
 // Session represents a remote tmux session discovered by the scanner.
 type Session struct {
-	Host      string       // full hostname
-	HostShort string       // abbreviated hostname
-	Name      string       // tmux session name
-	Attached  int          // number of attached clients (0 = free)
-	Windows   int          // number of windows
-	Desired   *DesiredInfo // non-nil for ghost sessions (desired but not yet created)
+	Host         string       // full hostname
+	HostShort    string       // abbreviated hostname
+	Name         string       // tmux session name
+	Attached     int          // number of attached clients (0 = free)
+	Windows      int          // number of windows
+	Created      int64        // unix timestamp of creation (0 if unknown)
+	LastActivity int64        // unix timestamp of last activity (0 if unknown)
+	Tags         []string     // host tags from config (empty if untagged)
+	Desired      *DesiredInfo // non-nil for ghost sessions (desired but not yet created)
 }
 
 // IsGhost returns true if this session is desired but doesn't exist yet.
@@ -65,11 +69,11 @@ type Model struct {
 	warpTarget  *Session           // set on Enter, triggers tea.Quit
 	selectedKey string             // stable selection tracking across filter changes
 	matchInfo   map[string]matchInfo // fuzzy highlight indexes keyed by Session.Key()
+	tagFilter   string             // active tag filter (empty = no filter)
+	tagCursor   int                // cursor position in tag picker
 	viewOffset  int                // first visible row in the scrolling list
 	configPath          string             // path to the config file
 	config              *config.Config     // in-memory config (for editor saves)
-	toastText           string             // toast notification text
-	toastExpiry         time.Time          // when the toast should disappear
 	editor              editor.Model        // config editor sub-model
 	wizard              editor.WizardModel  // first-run wizard sub-model
 	sshHosts            []sshconfig.Host    // parsed SSH config hosts
@@ -185,9 +189,18 @@ func (m *Model) SetWizardMode() {
 // WizardConfig returns the config produced by the wizard, or nil.
 func (m Model) WizardConfig() *config.Config { return m.wizardConfig }
 
+// hasValidCursorSelection returns true when there is a config, a non-empty
+// filtered list, and the cursor is within bounds.
+func (m Model) hasValidCursorSelection() bool {
+	if m.config == nil || len(m.filtered) == 0 {
+		return false
+	}
+	return m.cursor >= 0 && m.cursor < len(m.filtered)
+}
+
 // findHostEntry returns the config entry and index for the currently selected session's host.
 func (m Model) findHostEntry() (config.HostEntry, int, bool) {
-	if m.config == nil || len(m.filtered) == 0 || m.cursor < 0 || m.cursor >= len(m.filtered) {
+	if !m.hasValidCursorSelection() {
 		return config.HostEntry{}, -1, false
 	}
 	target := m.filtered[m.cursor].Host
@@ -232,34 +245,70 @@ func attachedRank(s Session) int {
 // Ghosts that match a real session (same host+name) are replaced; ghosts with
 // no match are kept. Real sessions with no matching ghost are added.
 func (m *Model) promoteGhosts(msg PromoteGhostMsg) {
-	// Build set of real session names for this host.
-	realNames := make(map[string]Session, len(msg.Sessions))
-	for _, s := range msg.Sessions {
-		realNames[s.Name] = s
-	}
-
-	// Replace matching ghosts with real sessions, track which were matched.
-	matched := make(map[string]bool)
-	for i, s := range m.sessions {
-		if s.Host == msg.Host && s.IsGhost() {
-			if real, ok := realNames[s.Name]; ok {
-				m.sessions[i] = real
-				matched[s.Name] = true
-			}
-		}
-	}
-
-	// Add any real sessions that had no matching ghost.
-	for _, s := range msg.Sessions {
-		if !matched[s.Name] {
-			m.sessions = append(m.sessions, s)
-		}
-	}
+	scanned := buildScannedMap(msg.Sessions)
+	matched := m.replaceMatchingGhosts(msg.Host, scanned)
+	m.appendUnmatched(msg.Sessions, matched)
 
 	sortSessions(m.sessions)
 	m.scanDone++
 	m.applyFilter()
 	m.ensureViewport()
+}
+
+// buildScannedMap builds a lookup of session name -> Session from scan results.
+func buildScannedMap(sessions []Session) map[string]Session {
+	result := make(map[string]Session, len(sessions))
+	for _, s := range sessions {
+		result[s.Name] = s
+	}
+	return result
+}
+
+// replaceMatchingGhosts replaces ghost sessions with scanned sessions and returns matched names.
+func (m *Model) replaceMatchingGhosts(host string, scanned map[string]Session) map[string]bool {
+	matched := make(map[string]bool)
+	for i, s := range m.sessions {
+		if actual, ok := m.ghostMatch(i, host, scanned); ok {
+			m.sessions[i] = actual
+			matched[s.Name] = true
+		}
+	}
+	return matched
+}
+
+// ghostMatch returns the scanned session if m.sessions[i] is a ghost for the given host.
+func (m *Model) ghostMatch(i int, host string, scanned map[string]Session) (Session, bool) {
+	s := m.sessions[i]
+	if s.Host != host || !s.IsGhost() {
+		return Session{}, false
+	}
+	actual, ok := scanned[s.Name]
+	return actual, ok
+}
+
+// appendUnmatched adds scanned sessions that had no matching ghost.
+func (m *Model) appendUnmatched(sessions []Session, matched map[string]bool) {
+	for _, s := range sessions {
+		if !matched[s.Name] {
+			m.sessions = append(m.sessions, s)
+		}
+	}
+}
+
+// allTags returns all unique tags across all sessions, sorted alphabetically.
+func (m Model) allTags() []string {
+	seen := make(map[string]bool)
+	for _, s := range m.sessions {
+		for _, tag := range s.Tags {
+			seen[tag] = true
+		}
+	}
+	tags := make([]string, 0, len(seen))
+	for tag := range seen {
+		tags = append(tags, tag)
+	}
+	slices.Sort(tags)
+	return tags
 }
 
 // visibleRows returns the number of session rows that fit on screen,

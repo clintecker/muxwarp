@@ -24,7 +24,23 @@ archives:
   - id: tgz
     builds: [muxwarp]
     format: tar.gz
+    files:
+      - completions/*
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+brews:
+  - name: muxwarp
+    repository:
+      owner: clintecker
+      name: homebrew-tap
+    homepage: https://github.com/clintecker/muxwarp
+    description: "Warp into tmux sessions on remote machines"
+    license: "MIT"
+    install: |
+      bin.install "muxwarp"
+      bash_completion.install "completions/muxwarp.bash" => "muxwarp"
+      zsh_completion.install "completions/muxwarp.zsh" => "_muxwarp"
+      fish_completion.install "completions/muxwarp.fish" => "muxwarp.fish"
 
 checksum:
   name_template: "checksums.txt"

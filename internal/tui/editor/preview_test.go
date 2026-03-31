@@ -8,87 +8,46 @@ import (
 	"github.com/clintecker/muxwarp/internal/config"
 )
 
-func TestRenderPreview_HostOnly(t *testing.T) {
-	entry := config.HostEntry{
-		Target: "user@server1",
+func assertPreviewContains(t *testing.T, output, substr string) {
+	t.Helper()
+	if !strings.Contains(output, substr) {
+		t.Errorf("expected output to contain %q, got:\n%s", substr, output)
 	}
+}
 
+func assertPreviewExcludes(t *testing.T, output, substr string) {
+	t.Helper()
+	if strings.Contains(output, substr) {
+		t.Errorf("expected output to NOT contain %q, got:\n%s", substr, output)
+	}
+}
+
+func TestRenderPreview_HostOnly(t *testing.T) {
+	entry := config.HostEntry{Target: "user@server1"}
 	output := RenderPreview(entry, 10)
 
-	// Should contain the target value.
-	if !strings.Contains(output, "user@server1") {
-		t.Errorf("expected output to contain target, got:\n%s", output)
-	}
-
-	// Should contain "target" key.
-	if !strings.Contains(output, "target") {
-		t.Errorf("expected output to contain 'target' key, got:\n%s", output)
-	}
-
-	// Should NOT contain "sessions".
-	if strings.Contains(output, "sessions") {
-		t.Errorf("expected output to not contain 'sessions', got:\n%s", output)
-	}
+	assertPreviewContains(t, output, "user@server1")
+	assertPreviewContains(t, output, "target")
+	assertPreviewExcludes(t, output, "sessions")
 }
 
 func TestRenderPreview_WithSessions(t *testing.T) {
 	entry := config.HostEntry{
 		Target: "user@server2",
 		Sessions: []config.DesiredSession{
-			{
-				Name: "myproject",
-				Dir:  "~/code/myproject",
-				Cmd:  "nvim",
-			},
-			{
-				Name: "logs",
-				Dir:  "/var/log",
-			},
+			{Name: "myproject", Dir: "~/code/myproject", Cmd: "nvim"},
+			{Name: "logs", Dir: "/var/log"},
 		},
 	}
 
 	output := RenderPreview(entry, 20)
 
-	// Should contain target.
-	if !strings.Contains(output, "user@server2") {
-		t.Errorf("expected output to contain target, got:\n%s", output)
-	}
-
-	// Should contain "sessions" keyword.
-	if !strings.Contains(output, "sessions") {
-		t.Errorf("expected output to contain 'sessions', got:\n%s", output)
-	}
-
-	// Should contain session names.
-	if !strings.Contains(output, "myproject") {
-		t.Errorf("expected output to contain 'myproject', got:\n%s", output)
-	}
-	if !strings.Contains(output, "logs") {
-		t.Errorf("expected output to contain 'logs', got:\n%s", output)
-	}
-
-	// Should contain dirs.
-	if !strings.Contains(output, "~/code/myproject") {
-		t.Errorf("expected output to contain dir '~/code/myproject', got:\n%s", output)
-	}
-	if !strings.Contains(output, "/var/log") {
-		t.Errorf("expected output to contain dir '/var/log', got:\n%s", output)
-	}
-
-	// Should contain cmd for first session.
-	if !strings.Contains(output, "nvim") {
-		t.Errorf("expected output to contain cmd 'nvim', got:\n%s", output)
-	}
-
-	// Should contain "name", "dir", "cmd" keys.
-	if !strings.Contains(output, "name") {
-		t.Errorf("expected output to contain 'name' key, got:\n%s", output)
-	}
-	if !strings.Contains(output, "dir") {
-		t.Errorf("expected output to contain 'dir' key, got:\n%s", output)
-	}
-	if !strings.Contains(output, "cmd") {
-		t.Errorf("expected output to contain 'cmd' key, got:\n%s", output)
+	for _, want := range []string{
+		"user@server2", "sessions", "myproject", "logs",
+		"~/code/myproject", "/var/log", "nvim",
+		"name", "dir", "cmd",
+	} {
+		assertPreviewContains(t, output, want)
 	}
 }
 

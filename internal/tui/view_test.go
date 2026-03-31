@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -191,7 +192,7 @@ func TestRenderHeader_DoneScanning(t *testing.T) {
 func TestComputeColumnWidths(t *testing.T) {
 	m := newTestModelWithSessions()
 
-	cols := m.computeColumnWidths()
+	cols := m.computeColumnWidths(time.Now())
 
 	// Sessions: "dev" (3), "build" (5), "staging" (7) — max name = 7
 	if cols.maxName != 7 {
@@ -208,7 +209,7 @@ func TestComputeColumnWidths_NarrowTerminal(t *testing.T) {
 	m := newTestModelWithSessions()
 	m.width = 50 // below 60 threshold
 
-	cols := m.computeColumnWidths()
+	cols := m.computeColumnWidths(time.Now())
 
 	if cols.maxDots != 0 {
 		t.Errorf("maxDots should be 0 for narrow terminal, got %d", cols.maxDots)
@@ -219,13 +220,14 @@ func TestColumnAlignment_HostsAligned(t *testing.T) {
 	m := newTestModelWithSessions()
 	m.width = 100
 
-	cols := m.computeColumnWidths()
+	now := time.Now()
+	cols := m.computeColumnWidths(now)
 
 	// Render all rows, strip ANSI, find host at rune level (not byte level,
 	// since ▪/◇/◆ are multi-byte UTF-8 but 1 visual column each).
 	hostPositions := make(map[int]bool)
 	for i := range m.filtered {
-		row := m.renderRow(i, cols)
+		row := m.renderRow(i, cols, now)
 		plain := ansiRE.ReplaceAllString(row, "")
 		host := m.filtered[i].HostShort
 		runes := []rune(plain)
@@ -284,5 +286,81 @@ func TestView_GhostBadge(t *testing.T) {
 	}
 	if !strings.Contains(v.Content, "◌") {
 		t.Error("View should contain '◌' symbol for ghost session")
+	}
+}
+
+func TestView_SessionMetadata(t *testing.T) {
+	now := time.Now()
+	m := newTestModel(1)
+
+	sessions := []Session{
+		{
+			Host: "alpha", HostShort: "alpha", Name: "dev",
+			Attached: 2, Windows: 3,
+			Created:      now.Add(-3 * 24 * time.Hour).Unix(),
+			LastActivity: now.Add(-5 * time.Minute).Unix(),
+		},
+	}
+	newM, _ := m.Update(SessionBatchMsg{Host: "alpha", Sessions: sessions})
+	m = newM.(Model)
+	newM, _ = m.Update(ScanDoneMsg{})
+	m = newM.(Model)
+
+	v := m.View()
+	stripped := ansiRE.ReplaceAllString(v.Content, "")
+
+	if !strings.Contains(stripped, "2↗") {
+		t.Error("expected attached count '2↗' in output")
+	}
+	if !strings.Contains(stripped, "3d") {
+		t.Error("expected age '3d' in output")
+	}
+	if !strings.Contains(stripped, "5m ago") {
+		t.Error("expected last activity '5m ago' in output")
+	}
+}
+
+func TestView_SessionMetadata_SingleAttach(t *testing.T) {
+	now := time.Now()
+	m := newTestModel(1)
+
+	sessions := []Session{
+		{
+			Host: "alpha", HostShort: "alpha", Name: "dev",
+			Attached: 1, Windows: 2,
+			Created:      now.Add(-1 * time.Hour).Unix(),
+			LastActivity: now.Add(-10 * time.Second).Unix(),
+		},
+	}
+	newM, _ := m.Update(SessionBatchMsg{Host: "alpha", Sessions: sessions})
+	m = newM.(Model)
+	newM, _ = m.Update(ScanDoneMsg{})
+	m = newM.(Model)
+
+	v := m.View()
+	stripped := ansiRE.ReplaceAllString(v.Content, "")
+
+	if strings.Contains(stripped, "1↗") {
+		t.Error("single attach should not show '1↗'")
+	}
+}
+
+func TestView_SessionMetadata_GhostNoMetadata(t *testing.T) {
+	m := newTestModel(1)
+
+	sessions := []Session{
+		{
+			Host: "alpha", HostShort: "alpha", Name: "ghost",
+			Desired: &DesiredInfo{Dir: "~/code"},
+		},
+	}
+	newM, _ := m.Update(SessionBatchMsg{Host: "alpha", Sessions: sessions})
+	m = newM.(Model)
+
+	v := m.View()
+	stripped := ansiRE.ReplaceAllString(v.Content, "")
+
+	if strings.Contains(stripped, "ago") {
+		t.Error("ghost session should not show 'ago'")
 	}
 }

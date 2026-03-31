@@ -119,7 +119,7 @@ func TestScanHost_InvalidSessionName(t *testing.T) {
 printf 'good-session\t1\t2\n'
 printf 'bad:name\t0\t1\n'
 printf 'also_good\t0\t5\n'
-printf 'bad\x01ctrl\t1\t1\n'
+printf 'bad\001ctrl\t1\t1\n'
 `)
 
 	ctx := context.Background()
@@ -203,5 +203,52 @@ func assertHostCount(t *testing.T, collected map[string][]Session, host string, 
 	t.Helper()
 	if len(collected[host]) != want {
 		t.Errorf("%s: got %d sessions, want %d", host, len(collected[host]), want)
+	}
+}
+
+func assertSessionTimestamps(t *testing.T, s Session, wantCreated, wantActivity int64) {
+	t.Helper()
+	if s.Created != wantCreated {
+		t.Errorf("Created = %d, want %d", s.Created, wantCreated)
+	}
+	if s.LastActivity != wantActivity {
+		t.Errorf("LastActivity = %d, want %d", s.LastActivity, wantActivity)
+	}
+}
+
+func TestScanHost_WithTimestamps(t *testing.T) {
+	withFakeSSH(t, `#!/bin/sh
+printf 'dev\t1\t3\t1711756800\t1711843100\n'
+printf 'build\t0\t1\t1711670400\t1711756700\n'
+`)
+	ctx := context.Background()
+	sessions, err := ScanHost(ctx, "clint@indigo", "3")
+	if err != nil {
+		t.Fatalf("ScanHost returned error: %v", err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("got %d sessions, want 2", len(sessions))
+	}
+	assertSessionTimestamps(t, sessions[0], 1711756800, 1711843100)
+	assertSessionTimestamps(t, sessions[1], 1711670400, 1711756700)
+}
+
+func TestScanHost_MissingTimestamps(t *testing.T) {
+	withFakeSSH(t, `#!/bin/sh
+printf 'dev\t1\t3\n'
+`)
+	ctx := context.Background()
+	sessions, err := ScanHost(ctx, "clint@indigo", "3")
+	if err != nil {
+		t.Fatalf("ScanHost returned error: %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("got %d sessions, want 1", len(sessions))
+	}
+	if sessions[0].Created != 0 {
+		t.Errorf("Created = %d, want 0 for missing timestamp", sessions[0].Created)
+	}
+	if sessions[0].LastActivity != 0 {
+		t.Errorf("LastActivity = %d, want 0 for missing timestamp", sessions[0].LastActivity)
 	}
 }

@@ -35,41 +35,50 @@ func TestWizard_Step1_EmptyHost_Blocked(t *testing.T) {
 	}
 }
 
-func TestWizard_Step2_SavesWithSession(t *testing.T) {
+func advanceToSessionStep(t *testing.T) WizardModel {
+	t.Helper()
 	m := NewWizard(testHostsEditor(), 80, 24)
 	m.hostInput.SetValue("alice@atlas")
-
-	// Advance to step 2.
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.Step() != WizardStepSession {
 		t.Fatal("should be in session step")
 	}
+	return m
+}
 
-	m.nameInput.SetValue("api-server")
-	m.dirInput.SetValue("~/code/api")
-
-	// Press enter to save.
-	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+func requireWizardSaved(t *testing.T, cmd tea.Cmd) WizardSavedMsg {
+	t.Helper()
 	if cmd == nil {
-		t.Fatal("enter should return save command")
+		t.Fatal("expected save command, got nil")
 	}
-
 	msg := cmd()
 	saved, ok := msg.(WizardSavedMsg)
 	if !ok {
 		t.Fatalf("expected WizardSavedMsg, got %T", msg)
 	}
+	return saved
+}
+
+func TestWizard_Step2_SavesWithSession(t *testing.T) {
+	m := advanceToSessionStep(t)
+	m.nameInput.SetValue("api-server")
+	m.dirInput.SetValue("~/code/api")
+
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	saved := requireWizardSaved(t, cmd)
+
 	if len(saved.Config.Hosts) != 1 {
 		t.Fatalf("expected 1 host, got %d", len(saved.Config.Hosts))
 	}
-	if saved.Config.Hosts[0].Target != "alice@atlas" {
-		t.Errorf("target = %q, want %q", saved.Config.Hosts[0].Target, "alice@atlas")
+	host := saved.Config.Hosts[0]
+	if host.Target != "alice@atlas" {
+		t.Errorf("target = %q, want %q", host.Target, "alice@atlas")
 	}
-	if len(saved.Config.Hosts[0].Sessions) != 1 {
-		t.Fatalf("expected 1 session, got %d", len(saved.Config.Hosts[0].Sessions))
+	if len(host.Sessions) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(host.Sessions))
 	}
-	if saved.Config.Hosts[0].Sessions[0].Name != "api-server" {
-		t.Errorf("session name = %q, want %q", saved.Config.Hosts[0].Sessions[0].Name, "api-server")
+	if host.Sessions[0].Name != "api-server" {
+		t.Errorf("session name = %q, want %q", host.Sessions[0].Name, "api-server")
 	}
 }
 

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -501,7 +502,7 @@ func TestEditorCanceled_ReturnsToList(t *testing.T) {
 	m := newTestModelWithSessions()
 	m.mode = ModeEdit
 
-	newM, _ := m.Update(editor.EditorCanceledMsg{})
+	newM, _ := m.Update(editor.CanceledMsg{})
 	rm := newM.(Model)
 
 	if rm.mode != ModeList {
@@ -516,10 +517,10 @@ func TestEditorSaved_MergesDuplicateHost(t *testing.T) {
 			{Target: "alpha", Sessions: []config.DesiredSession{{Name: "existing"}}},
 		},
 	}
-	m.configPath = "/dev/null" // avoid actual file write
+	m.configPath = filepath.Join(t.TempDir(), "test-config.yaml")
 
 	// Simulate adding a host with the same target.
-	msg := editor.EditorSavedMsg{
+	msg := editor.SavedMsg{
 		Entry:     config.HostEntry{Target: "alpha", Sessions: []config.DesiredSession{{Name: "new-session"}}},
 		EditIndex: -1,
 	}
@@ -588,5 +589,50 @@ func TestWizardMode_DelegatesToWizard(t *testing.T) {
 	cmd := m.Init()
 	if cmd == nil {
 		t.Error("Init in wizard mode should return focus command")
+	}
+}
+
+func TestTagFilter(t *testing.T) {
+	m := newTestModel(2)
+	sessions := []Session{
+		{Host: "alpha", HostShort: "alpha", Name: "dev", Attached: 0, Windows: 1, Tags: []string{"prod"}},
+		{Host: "beta", HostShort: "beta", Name: "staging", Attached: 0, Windows: 2, Tags: []string{"staging"}},
+		{Host: "gamma", HostShort: "gamma", Name: "build", Attached: 0, Windows: 1, Tags: []string{"prod", "infra"}},
+	}
+	newM, _ := m.Update(SessionBatchMsg{Host: "mixed", Sessions: sessions})
+	m = newM.(Model)
+	newM, _ = m.Update(ScanDoneMsg{})
+	m = newM.(Model)
+
+	if len(m.filtered) != 3 {
+		t.Fatalf("before tag filter: got %d filtered, want 3", len(m.filtered))
+	}
+	m.tagFilter = "prod"
+	m.applyFilter()
+	if len(m.filtered) != 2 {
+		t.Fatalf("after tag filter 'prod': got %d filtered, want 2", len(m.filtered))
+	}
+	m.tagFilter = ""
+	m.applyFilter()
+	if len(m.filtered) != 3 {
+		t.Fatalf("after clearing tag filter: got %d filtered, want 3", len(m.filtered))
+	}
+}
+
+func TestAllTags(t *testing.T) {
+	m := newTestModel(1)
+	sessions := []Session{
+		{Host: "alpha", HostShort: "alpha", Name: "dev", Tags: []string{"prod", "api"}},
+		{Host: "beta", HostShort: "beta", Name: "staging", Tags: []string{"staging"}},
+		{Host: "gamma", HostShort: "gamma", Name: "build", Tags: []string{"prod"}},
+	}
+	newM, _ := m.Update(SessionBatchMsg{Host: "mixed", Sessions: sessions})
+	m = newM.(Model)
+	tags := m.allTags()
+	if len(tags) != 3 {
+		t.Fatalf("allTags() = %v, want 3 tags", tags)
+	}
+	if tags[0] != "api" || tags[1] != "prod" || tags[2] != "staging" {
+		t.Errorf("allTags() = %v, want [api prod staging]", tags)
 	}
 }

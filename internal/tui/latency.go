@@ -82,17 +82,26 @@ func (m Model) renderLatencyTag(s Session) string {
 	if !ok {
 		return ""
 	}
+	return formatLatency(d)
+}
+
+// formatLatency formats a duration as a styled latency tag.
+func formatLatency(d time.Duration) string {
 	if d == 0 {
 		return latencyUnreachableStyle.Render(" --ms")
 	}
 	ms := d.Milliseconds()
 	text := fmt.Sprintf(" %dms", ms)
-	switch {
-	case ms < 50:
-		return latencyGoodStyle.Render(text)
-	case ms < 150:
-		return latencyOkStyle.Render(text)
-	default:
-		return latencyBadStyle.Render(text)
+	return latencyStyle(ms).Render(text)
+}
+
+// latencyStyle returns the appropriate style for a given latency in milliseconds.
+func latencyStyle(ms int64) lipgloss.Style {
+	if ms < 50 {
+		return latencyGoodStyle
 	}
+	if ms < 150 {
+		return latencyOkStyle
+	}
+	return latencyBadStyle
 }

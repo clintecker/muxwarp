@@ -16,24 +16,62 @@ func testHostsEditor() []sshconfig.Host {
 	}
 }
 
+func assertFocus(t *testing.T, m Model, want Focus) {
+	t.Helper()
+	if m.GetFocus() != want {
+		t.Errorf("focus = %d, want %d", m.GetFocus(), want)
+	}
+}
+
+func assertSessionCount(t *testing.T, m Model, want int) {
+	t.Helper()
+	if len(m.Sessions()) != want {
+		t.Fatalf("sessions = %d, want %d", len(m.Sessions()), want)
+	}
+}
+
+func assertHostValue(t *testing.T, m Model, want string) {
+	t.Helper()
+	if m.HostValue() != want {
+		t.Errorf("host value = %q, want %q", m.HostValue(), want)
+	}
+}
+
+func assertNoSaveErr(t *testing.T, m Model) {
+	t.Helper()
+	if m.SaveErr() != "" {
+		t.Errorf("unexpected save error: %q", m.SaveErr())
+	}
+}
+
+func assertSaveErr(t *testing.T, m Model) {
+	t.Helper()
+	if m.SaveErr() == "" {
+		t.Fatal("expected save error")
+	}
+}
+
+func requireSavedMsg(t *testing.T, msg tea.Msg) SavedMsg {
+	t.Helper()
+	saved, ok := msg.(SavedMsg)
+	if !ok {
+		t.Fatalf("expected SavedMsg, got %T", msg)
+	}
+	return saved
+}
+
 func TestNew_InitialState(t *testing.T) {
 	m := New(testHostsEditor(), 80, 24)
 
-	if m.GetFocus() != FocusHost {
-		t.Errorf("initial focus = %d, want FocusHost", m.GetFocus())
-	}
+	assertFocus(t, m, FocusHost)
 	if m.editIndex != -1 {
 		t.Errorf("editIndex = %d, want -1", m.editIndex)
 	}
 	if m.editing {
 		t.Error("editing should be false for new editor")
 	}
-	if len(m.Sessions()) != 0 {
-		t.Errorf("sessions = %d, want 0", len(m.Sessions()))
-	}
-	if m.HostValue() != "" {
-		t.Errorf("host value = %q, want empty", m.HostValue())
-	}
+	assertSessionCount(t, m, 0)
+	assertHostValue(t, m, "")
 }
 
 func TestNewForEdit_PrePopulated(t *testing.T) {
@@ -46,18 +84,14 @@ func TestNewForEdit_PrePopulated(t *testing.T) {
 	}
 	m := NewForEdit(entry, 2, "api-server", testHostsEditor(), 80, 24)
 
-	if m.HostValue() != "alice@atlas" {
-		t.Errorf("host = %q, want %q", m.HostValue(), "alice@atlas")
-	}
+	assertHostValue(t, m, "alice@atlas")
 	if !m.editing {
 		t.Error("editing should be true for edit mode")
 	}
 	if m.editIndex != 2 {
 		t.Errorf("editIndex = %d, want 2", m.editIndex)
 	}
-	if len(m.Sessions()) != 2 {
-		t.Fatalf("sessions = %d, want 2", len(m.Sessions()))
-	}
+	assertSessionCount(t, m, 2)
 	if m.Sessions()[0].Name != "api-server" {
 		t.Errorf("session[0].Name = %q, want %q", m.Sessions()[0].Name, "api-server")
 	}
@@ -125,18 +159,12 @@ func TestSave_ValidHost(t *testing.T) {
 	m.hostInput.SetValue("alice@atlas")
 
 	updated, cmd := m.trySave()
-	if updated.SaveErr() != "" {
-		t.Errorf("unexpected save error: %q", updated.SaveErr())
-	}
+	assertNoSaveErr(t, updated)
 	if cmd == nil {
 		t.Fatal("trySave should return a command on success")
 	}
 
-	msg := cmd()
-	saved, ok := msg.(EditorSavedMsg)
-	if !ok {
-		t.Fatalf("expected EditorSavedMsg, got %T", msg)
-	}
+	saved := requireSavedMsg(t, cmd())
 	if saved.Entry.Target != "alice@atlas" {
 		t.Errorf("saved target = %q, want %q", saved.Entry.Target, "alice@atlas")
 	}
@@ -150,9 +178,7 @@ func TestSave_EmptyHost_Error(t *testing.T) {
 	// Don't set host value — it's empty.
 
 	updated, cmd := m.trySave()
-	if updated.SaveErr() == "" {
-		t.Fatal("expected save error for empty host")
-	}
+	assertSaveErr(t, updated)
 	if cmd != nil {
 		t.Error("trySave should return nil command on error")
 	}
@@ -166,9 +192,7 @@ func TestSave_InvalidSessionName_Error(t *testing.T) {
 	}
 
 	updated, cmd := m.trySave()
-	if updated.SaveErr() == "" {
-		t.Fatal("expected save error for invalid session name")
-	}
+	assertSaveErr(t, updated)
 	if cmd != nil {
 		t.Error("trySave should return nil command on error")
 	}
@@ -183,8 +207,8 @@ func TestCancel_ProducesMsg(t *testing.T) {
 		t.Fatal("Esc should produce a command")
 	}
 	msg := cmd()
-	if _, ok := msg.(EditorCanceledMsg); !ok {
-		t.Errorf("expected EditorCanceledMsg, got %T", msg)
+	if _, ok := msg.(CanceledMsg); !ok {
+		t.Errorf("expected CanceledMsg, got %T", msg)
 	}
 }
 
@@ -302,7 +326,7 @@ func TestSave_WithSessions(t *testing.T) {
 		t.Fatal("trySave should return a command")
 	}
 	msg := cmd()
-	saved := msg.(EditorSavedMsg)
+	saved := msg.(SavedMsg)
 	if len(saved.Entry.Sessions) != 2 {
 		t.Fatalf("expected 2 non-empty sessions, got %d", len(saved.Entry.Sessions))
 	}

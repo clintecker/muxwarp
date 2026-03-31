@@ -37,10 +37,6 @@ var (
 	helperStyle = lipgloss.NewStyle().
 			Foreground(colorSlate)
 
-	// Valid field indicator.
-	validStyle = lipgloss.NewStyle().
-			Foreground(colorGreen)
-
 	// Error text.
 	errorStyle = lipgloss.NewStyle().
 			Foreground(colorRed)

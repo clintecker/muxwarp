@@ -16,6 +16,50 @@ func testHostsComplete() []sshconfig.Host {
 	}
 }
 
+func assertFilteredContains(t *testing.T, filtered []sshconfig.Host, alias string) {
+	t.Helper()
+	for _, h := range filtered {
+		if h.Alias == alias {
+			return
+		}
+	}
+	t.Errorf("expected filtered hosts to contain %q", alias)
+}
+
+func assertFilteredExcludes(t *testing.T, filtered []sshconfig.Host, alias string) {
+	t.Helper()
+	for _, h := range filtered {
+		if h.Alias == alias {
+			t.Errorf("expected filtered hosts NOT to contain %q", alias)
+			return
+		}
+	}
+}
+
+func requireSelected(t *testing.T, d *DropdownState) sshconfig.Host {
+	t.Helper()
+	selected, ok := d.Selected()
+	if !ok {
+		t.Fatal("expected a selection")
+	}
+	return selected
+}
+
+func assertSelectedAlias(t *testing.T, d *DropdownState, want string) {
+	t.Helper()
+	selected := requireSelected(t, d)
+	if selected.Alias != want {
+		t.Errorf("selected alias = %q, want %q", selected.Alias, want)
+	}
+}
+
+func assertViewContains(t *testing.T, view, substr string) {
+	t.Helper()
+	if !strings.Contains(view, substr) {
+		t.Errorf("expected view to contain %q", substr)
+	}
+}
+
 func TestDropdown_Filter(t *testing.T) {
 	hosts := testHostsComplete()
 	d := NewDropdown(hosts)
@@ -26,75 +70,33 @@ func TestDropdown_Filter(t *testing.T) {
 	if !d.Active {
 		t.Fatal("dropdown should be active after Open")
 	}
-
 	if len(d.filtered) != 1 {
 		t.Errorf("expected 1 filtered host (atlas), got %d", len(d.filtered))
 	}
 
-	// Verify atlas is present.
-	foundAtlas := false
-	foundForge := false
-	for _, h := range d.filtered {
-		if h.Alias == "atlas" {
-			foundAtlas = true
-		}
-		if h.Alias == "forge" {
-			foundForge = true
-		}
-	}
-
-	if !foundAtlas {
-		t.Error("expected 'atlas' to match filter 'at'")
-	}
-	if foundForge {
-		t.Error("expected 'forge' not to match filter 'at'")
-	}
+	assertFilteredContains(t, d.filtered, "atlas")
+	assertFilteredExcludes(t, d.filtered, "forge")
 }
 
 func TestDropdown_Select(t *testing.T) {
 	hosts := testHostsComplete()
 	d := NewDropdown(hosts)
-
 	d.Open("")
 
 	// Initially cursor is at 0 (atlas).
-	selected, ok := d.Selected()
-	if !ok {
-		t.Fatal("expected a selection")
-	}
-	if selected.Alias != "atlas" {
-		t.Errorf("expected atlas, got %s", selected.Alias)
-	}
+	assertSelectedAlias(t, &d, "atlas")
 
 	// Move down to forge.
 	d.MoveDown()
-	selected, ok = d.Selected()
-	if !ok {
-		t.Fatal("expected a selection after MoveDown")
-	}
-	if selected.Alias != "forge" {
-		t.Errorf("expected forge, got %s", selected.Alias)
-	}
+	assertSelectedAlias(t, &d, "forge")
 
 	// Move down again to bastion.
 	d.MoveDown()
-	selected, ok = d.Selected()
-	if !ok {
-		t.Fatal("expected a selection after second MoveDown")
-	}
-	if selected.Alias != "bastion" {
-		t.Errorf("expected bastion, got %s", selected.Alias)
-	}
+	assertSelectedAlias(t, &d, "bastion")
 
 	// Move up to forge.
 	d.MoveUp()
-	selected, ok = d.Selected()
-	if !ok {
-		t.Fatal("expected a selection after MoveUp")
-	}
-	if selected.Alias != "forge" {
-		t.Errorf("expected forge after MoveUp, got %s", selected.Alias)
-	}
+	assertSelectedAlias(t, &d, "forge")
 }
 
 func TestDropdown_EscDismisses(t *testing.T) {
@@ -256,30 +258,17 @@ func TestFilterHosts_MultipleMatches(t *testing.T) {
 func TestDropdown_View(t *testing.T) {
 	hosts := testHostsComplete()
 	d := NewDropdown(hosts)
-
 	d.Open("")
 
-	// Render with no existing targets.
 	view := d.View([]string{})
 	if view == "" {
 		t.Fatal("expected non-empty view")
 	}
 
-	// Should contain all three hosts.
-	if !strings.Contains(view, "atlas") {
-		t.Error("expected view to contain 'atlas'")
-	}
-	if !strings.Contains(view, "forge") {
-		t.Error("expected view to contain 'forge'")
-	}
-	if !strings.Contains(view, "bastion") {
-		t.Error("expected view to contain 'bastion'")
-	}
-
-	// Selected item should have arrow prefix.
-	if !strings.Contains(view, "▸") {
-		t.Error("expected view to contain selection arrow '▸'")
-	}
+	assertViewContains(t, view, "atlas")
+	assertViewContains(t, view, "forge")
+	assertViewContains(t, view, "bastion")
+	assertViewContains(t, view, "▸")
 }
 
 func TestDropdown_ViewWithExisting(t *testing.T) {
