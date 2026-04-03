@@ -301,8 +301,8 @@ func BuildGhostWarpScript(term, name, dir, repo, cmd string) string {
 
 	// Send startup command only for newly created sessions.
 	if cmd != "" {
-		fmt.Fprintf(&b, "  tmux send-keys -t %s -l %s \\; send-keys -t %s Enter\n",
-			singleQuote(name), singleQuote(cmd), singleQuote(name))
+		fmt.Fprintf(&b, "  tmux send-keys -t %s -l %s\n", singleQuote(name), singleQuote(cmd))
+		fmt.Fprintf(&b, "  tmux send-keys -t %s Enter\n", singleQuote(name))
 	}
 	b.WriteString("fi\n")
 
