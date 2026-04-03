@@ -539,6 +539,36 @@ func TestEditorSaved_MergesDuplicateHost(t *testing.T) {
 	}
 }
 
+func TestEditorSaved_EditTargetMergesIntoExisting(t *testing.T) {
+	m := newTestModelWithSessions()
+	m.config = &config.Config{
+		Hosts: []config.HostEntry{
+			{Target: "alpha", Sessions: []config.DesiredSession{{Name: "existing"}}},
+			{Target: "wronghost", Sessions: []config.DesiredSession{{Name: "new-session"}}},
+		},
+	}
+	m.configPath = filepath.Join(t.TempDir(), "test-config.yaml")
+
+	// Simulate editing index 1, changing target from "wronghost" to "alpha".
+	msg := editor.SavedMsg{
+		Entry:     config.HostEntry{Target: "alpha", Sessions: []config.DesiredSession{{Name: "new-session"}}},
+		EditIndex: 1,
+	}
+	newM, _ := m.Update(msg)
+	rm := newM.(Model)
+
+	// Should merge into existing "alpha" and remove the old entry.
+	if len(rm.config.Hosts) != 1 {
+		t.Fatalf("hosts = %d, want 1 (merged)", len(rm.config.Hosts))
+	}
+	if rm.config.Hosts[0].Target != "alpha" {
+		t.Errorf("target = %q, want %q", rm.config.Hosts[0].Target, "alpha")
+	}
+	if len(rm.config.Hosts[0].Sessions) != 2 {
+		t.Fatalf("sessions = %d, want 2", len(rm.config.Hosts[0].Sessions))
+	}
+}
+
 func TestWizardSaved_SetsConfigAndQuits(t *testing.T) {
 	m := NewModel(0)
 	m.mode = ModeWizard

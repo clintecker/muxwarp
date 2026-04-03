@@ -430,10 +430,25 @@ func cloneHostEntry(h config.HostEntry) config.HostEntry {
 // applyEditorEntry updates or adds the entry from the editor into the config.
 func applyEditorEntry(cfg *config.Config, msg editor.SavedMsg) {
 	if msg.EditIndex >= 0 && msg.EditIndex < len(cfg.Hosts) {
-		cfg.Hosts[msg.EditIndex] = msg.Entry
+		applyEditedEntry(cfg, msg)
 		return
 	}
 	mergeOrAppendToConfig(cfg, msg.Entry)
+}
+
+// applyEditedEntry handles replacing an edited host. If the target was changed
+// to match a different existing host, the sessions are merged and the old entry
+// is removed to prevent duplicates.
+func applyEditedEntry(cfg *config.Config, msg editor.SavedMsg) {
+	existing := findHostByTarget(cfg.Hosts, msg.Entry.Target)
+	if existing < 0 || existing == msg.EditIndex {
+		cfg.Hosts[msg.EditIndex] = msg.Entry
+		return
+	}
+	// Target was changed to match another host — merge and remove old entry.
+	msg.Entry.Sessions = mergeSessions(cfg.Hosts[existing].Sessions, msg.Entry.Sessions)
+	cfg.Hosts[existing] = msg.Entry
+	cfg.Hosts = append(cfg.Hosts[:msg.EditIndex], cfg.Hosts[msg.EditIndex+1:]...)
 }
 
 // mergeOrAppendToConfig merges sessions into an existing host or appends a new one.

@@ -291,18 +291,20 @@ func BuildGhostWarpScript(term, name, dir, repo, cmd string) string {
 		fmt.Fprintf(&b, "}\n")
 	}
 
-	// Create detached session.
-	fmt.Fprintf(&b, "tmux new-session -d -s %s", singleQuote(name))
+	// Create detached session if it doesn't already exist.
+	fmt.Fprintf(&b, "if ! tmux has-session -t %s 2>/dev/null; then\n", singleQuote(name))
+	fmt.Fprintf(&b, "  tmux new-session -d -s %s", singleQuote(name))
 	if dir != "" {
 		fmt.Fprintf(&b, " -c %s", shellDir)
 	}
 	b.WriteString("\n")
 
-	// Send startup command (optional).
+	// Send startup command only for newly created sessions.
 	if cmd != "" {
-		fmt.Fprintf(&b, "tmux send-keys -t %s -l %s \\; send-keys -t %s Enter\n",
+		fmt.Fprintf(&b, "  tmux send-keys -t %s -l %s \\; send-keys -t %s Enter\n",
 			singleQuote(name), singleQuote(cmd), singleQuote(name))
 	}
+	b.WriteString("fi\n")
 
 	// Attach — exec replaces the shell so detach exits SSH cleanly.
 	fmt.Fprintf(&b, "exec env TERM=%s tmux attach-session -t %s\n", term, singleQuote(name))
