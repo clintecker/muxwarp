@@ -35,6 +35,15 @@ func TestWizard_Step1_EmptyHost_Blocked(t *testing.T) {
 	}
 }
 
+func TestWizard_Step1_TypingUpdatesHostInput(t *testing.T) {
+	m := NewWizard(testHostsEditor(), 80, 24)
+
+	updated, _ := m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	if updated.hostInput.Value() != "a" {
+		t.Errorf("host input = %q, want %q", updated.hostInput.Value(), "a")
+	}
+}
+
 func advanceToSessionStep(t *testing.T) WizardModel {
 	t.Helper()
 	m := NewWizard(testHostsEditor(), 80, 24)

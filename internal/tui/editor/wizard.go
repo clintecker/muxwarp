@@ -43,7 +43,7 @@ type WizardModel struct {
 
 // NewWizard creates a new wizard model.
 func NewWizard(sshHosts []sshconfig.Host, width, height int) WizardModel {
-	return WizardModel{
+	m := WizardModel{
 		hostInput: newHostInput(sshHosts),
 		nameInput: newSessionNameInput(),
 		dirInput:  newDirInput(),
@@ -52,6 +52,8 @@ func NewWizard(sshHosts []sshconfig.Host, width, height int) WizardModel {
 		width:     width,
 		height:    height,
 	}
+	m.hostInput.Focus()
+	return m
 }
 
 // Init returns the initial command (focus host input).
