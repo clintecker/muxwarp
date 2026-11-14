@@ -66,7 +66,17 @@ func TestBuildScanArgs(t *testing.T) {
 	assertArgContains(t, args, "clint@indigo", "target")
 
 	// Must contain the tmux list-sessions format string (double-quoted for remote shell).
-	assertArgContains(t, args, "\"#{session_name}\t#{session_attached}\t#{session_windows}\t#{session_created}\t#{session_activity}\"", "tmux format string")
+	assertArgContains(t, args, "\"#{session_name}:#{session_attached}:#{session_windows}:#{session_created}:#{session_activity}\"", "tmux format string")
+}
+
+func TestBuildScanArgsFormatIsPrintable(t *testing.T) {
+	args := BuildScanArgs("clint@indigo", "3")
+	format := args[len(args)-1]
+	for _, r := range format {
+		if r < 0x20 || r == 0x7f {
+			t.Fatalf("tmux format string contains control character %q; recent tmux replaces it with '_'", r)
+		}
+	}
 }
 
 // assertArgHasSSHOption checks that args contains "-o" followed by the expected option value.

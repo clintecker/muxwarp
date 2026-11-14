@@ -31,7 +31,11 @@ func BuildAttachArgs(target, term, sessionName string) []string {
 // Produces:
 //
 //	ssh -o ConnectTimeout=<timeoutSec> -o BatchMode=yes <target>
-//	    tmux list-sessions -F '#{session_name}\t#{session_attached}\t#{session_windows}\t#{session_created}\t#{session_activity}'
+//	    tmux list-sessions -F '#{session_name}:#{session_attached}:#{session_windows}:#{session_created}:#{session_activity}'
+//
+// Fields are colon-separated: tmux forbids ':' in session names, while recent
+// tmux releases (seen with 3.7c) replace control characters such as tab with
+// '_' in -F output, which left every line unparseable.
 func BuildScanArgs(target, timeoutSec string) []string {
 	return []string{
 		"ssh",
@@ -39,7 +43,7 @@ func BuildScanArgs(target, timeoutSec string) []string {
 		"-o", "BatchMode=yes",
 		target,
 		"tmux", "list-sessions", "-F",
-		"\"#{session_name}\t#{session_attached}\t#{session_windows}\t#{session_created}\t#{session_activity}\"",
+		"\"#{session_name}:#{session_attached}:#{session_windows}:#{session_created}:#{session_activity}\"",
 	}
 }
 
