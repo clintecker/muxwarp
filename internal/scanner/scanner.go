@@ -74,11 +74,11 @@ func parseSessions(out []byte, target string) []Session {
 	return sessions
 }
 
-// splitSessionFields splits a tab-separated line into session fields.
+// splitSessionFields splits a colon-separated line into session fields.
 // Accepts 3-field (name, attached, windows) or 5-field output with timestamps.
 // Returns false if the line has fewer than 3 fields or an invalid session name.
 func splitSessionFields(line string) (name string, attached, windows int, created, lastActivity int64, ok bool) {
-	parts := strings.Split(line, "\t")
+	parts := strings.Split(line, ":")
 	if len(parts) < 3 || !ssh.ValidSessionName(parts[0]) {
 		return "", 0, 0, 0, 0, false
 	}
@@ -113,7 +113,7 @@ func parseTimestamps(parts []string) (created, lastActivity int64) {
 	return c, la
 }
 
-// parseSessionLine parses a single tab-separated line into a Session.
+// parseSessionLine parses a single colon-separated line into a Session.
 // Returns false if the line is empty, malformed, or has an invalid name.
 func parseSessionLine(line, target, hostShort string) (Session, bool) {
 	name, attached, windows, created, lastActivity, ok := splitSessionFields(line)

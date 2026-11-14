@@ -47,8 +47,8 @@ func assertSessionInts(t *testing.T, got Session, wantAttached, wantWindows int)
 func TestScanHost_Success(t *testing.T) {
 	// Fake ssh prints two valid sessions in tmux list-sessions format.
 	withFakeSSH(t, `#!/bin/sh
-printf 'cjdos\t1\t3\n'
-printf 'build\t0\t1\n'
+printf 'cjdos:1:3\n'
+printf 'build:0:1\n'
 `)
 
 	ctx := context.Background()
@@ -116,10 +116,10 @@ func TestScanHost_InvalidSessionName(t *testing.T) {
 	// Mix of valid and invalid session names.
 	// Colons and control characters are rejected; most other characters are valid.
 	withFakeSSH(t, `#!/bin/sh
-printf 'good-session\t1\t2\n'
-printf 'bad:name\t0\t1\n'
-printf 'also_good\t0\t5\n'
-printf 'bad\001ctrl\t1\t1\n'
+printf 'good-session:1:2\n'
+printf 'bad:name:0:1\n'
+printf 'also_good:0:5\n'
+printf 'bad\001ctrl:1:1\n'
 `)
 
 	ctx := context.Background()
@@ -156,11 +156,11 @@ done
 
 case "$target" in
     clint@alpha)
-        printf 'dev\t1\t2\n'
+        printf 'dev:1:2\n'
         ;;
     clint@beta)
-        printf 'staging\t0\t3\n'
-        printf 'prod\t2\t5\n'
+        printf 'staging:0:3\n'
+        printf 'prod:2:5\n'
         ;;
     clint@gamma)
         # No sessions / tmux not running.
@@ -218,8 +218,8 @@ func assertSessionTimestamps(t *testing.T, s Session, wantCreated, wantActivity 
 
 func TestScanHost_WithTimestamps(t *testing.T) {
 	withFakeSSH(t, `#!/bin/sh
-printf 'dev\t1\t3\t1711756800\t1711843100\n'
-printf 'build\t0\t1\t1711670400\t1711756700\n'
+printf 'dev:1:3:1711756800:1711843100\n'
+printf 'build:0:1:1711670400:1711756700\n'
 `)
 	ctx := context.Background()
 	sessions, err := ScanHost(ctx, "clint@indigo", "3")
@@ -235,7 +235,7 @@ printf 'build\t0\t1\t1711670400\t1711756700\n'
 
 func TestScanHost_MissingTimestamps(t *testing.T) {
 	withFakeSSH(t, `#!/bin/sh
-printf 'dev\t1\t3\n'
+printf 'dev:1:3\n'
 `)
 	ctx := context.Background()
 	sessions, err := ScanHost(ctx, "clint@indigo", "3")
